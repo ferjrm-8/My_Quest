@@ -60,6 +60,7 @@ interface HUDProps {
   onOpenInstructions: () => void;
   onOpenLore: () => void;
   onReturnToTitle: () => void;
+  onGenerateRandomDungeon?: () => void;
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -94,6 +95,7 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenInstructions,
   onOpenLore,
   onReturnToTitle,
+  onGenerateRandomDungeon,
 }) => {
   const [bgmActive, setBgmActive] = useState(audio.getBgmState());
   const [soundMuted, setSoundMuted] = useState(audio.isMuted());
@@ -137,6 +139,17 @@ export const HUD: React.FC<HUDProps> = ({
 
         {/* Global Toolbar buttons */}
         <div className="flex items-center gap-2">
+          {/* Random dungeon generator button */}
+          {onGenerateRandomDungeon && (
+            <button
+              onClick={onGenerateRandomDungeon}
+              className="px-2.5 py-1.5 bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 text-purple-200 hover:text-white font-pixel text-[10px] rounded border border-purple-500 shadow flex items-center gap-1 font-bold transition cursor-pointer"
+              title="Generar un nuevo mapa aleatorio con salas y monstruos procedurables"
+            >
+              <span>🎲 NUEVA MAZMORRA</span>
+            </button>
+          )}
+
           {/* Always Present Skills Button */}
           <button
             onClick={onOpenSkills}
@@ -359,15 +372,26 @@ export const HUD: React.FC<HUDProps> = ({
               {/* 2. Attack Button */}
               <button
                 onClick={onInitiateAttack}
-                disabled={hasActed || !canAttack || activeHero.isDead}
+                disabled={hasActed || activeHero.isDead}
+                title={
+                  hasActed
+                    ? 'Ya has realizado una acción este turno'
+                    : !canAttack
+                    ? 'No hay enemigos a 1 casilla (acércate para golpear)'
+                    : '¡Atacar a un monstruo adyacente!'
+                }
                 className={`py-2 px-2 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 border transition ${
-                  hasActed || !canAttack || activeHero.isDead
+                  activeHero.isDead || hasActed
                     ? 'bg-stone-950 text-stone-600 border-stone-800 cursor-not-allowed'
-                    : 'bg-red-950 hover:bg-red-900 text-red-300 border-red-600 shadow-md cursor-pointer animate-pulse'
+                    : canAttack
+                    ? 'bg-red-900 hover:bg-red-800 text-red-100 border-red-500 shadow-lg cursor-pointer animate-pulse ring-2 ring-red-500/50'
+                    : 'bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-stone-300 border-stone-700 cursor-pointer'
                 }`}
               >
                 <Swords className="w-4 h-4" />
-                <span>ATACAR</span>
+                <span>
+                  {hasActed ? 'ACCIÓN USADA' : canAttack ? '⚔️ ¡ATACAR!' : 'ATACAR (1 CAS)'}
+                </span>
               </button>
 
               {/* 3. Cast Spell */}

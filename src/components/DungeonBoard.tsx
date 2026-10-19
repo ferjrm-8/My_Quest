@@ -97,7 +97,7 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
               onDoorClick(doorAtTile);
             } else if (isInteractiveFurniture && furnAtTile) {
               onFurnitureClick(furnAtTile);
-            } else if (monsterAtTile && isTargetableMonster) {
+            } else if (monsterAtTile && visible) {
               onMonsterClick(monsterAtTile);
             } else if (isMoveTarget) {
               onTileClick(x, y);
@@ -110,7 +110,7 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
               ? 'bg-[#211d19] hover:bg-[#2b2621]'
               : 'bg-[#141210] hover:bg-[#1a1714]'
           } ${isMoveTarget ? 'ring-2 ring-emerald-400 bg-emerald-950/60 cursor-pointer animate-pulse z-20' : ''} ${
-            isTargetableMonster ? 'ring-3 ring-red-500 bg-red-950/50 cursor-pointer animate-pulse z-20' : ''
+            isTargetableMonster ? 'ring-3 ring-red-500 bg-red-950/50 cursor-pointer animate-pulse z-20' : monsterAtTile && visible ? 'cursor-pointer hover:ring-1 hover:ring-red-400' : ''
           } ${isInteractiveDoor ? 'ring-2 ring-amber-400 cursor-pointer z-20' : ''} ${
             isInteractiveFurniture ? 'ring-2 ring-yellow-400 cursor-pointer z-20' : ''
           }`}

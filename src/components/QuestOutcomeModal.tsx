@@ -10,6 +10,7 @@ interface QuestOutcomeModalProps {
   quest: Quest;
   onNextOrRetry: () => void;
   onOpenSkills: () => void;
+  onDescendNextFloor?: () => void;
 }
 
 export const QuestOutcomeModal: React.FC<QuestOutcomeModalProps> = ({
@@ -18,6 +19,7 @@ export const QuestOutcomeModal: React.FC<QuestOutcomeModalProps> = ({
   quest,
   onNextOrRetry,
   onOpenSkills,
+  onDescendNextFloor,
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -84,34 +86,45 @@ export const QuestOutcomeModal: React.FC<QuestOutcomeModalProps> = ({
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          {isVictory && (
+        <div className="flex flex-col gap-2.5 justify-center">
+          {isVictory && onDescendNextFloor && (
             <button
-              onClick={onOpenSkills}
-              className="px-5 py-3 bg-amber-700 hover:bg-amber-600 text-stone-950 font-pixel text-xs rounded border border-amber-400 font-bold transition flex items-center justify-center gap-2"
+              onClick={onDescendNextFloor}
+              className="w-full py-3.5 bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 hover:from-amber-500 hover:to-yellow-400 text-stone-950 font-pixel text-xs sm:text-sm rounded border-2 border-yellow-300 font-bold shadow-xl transition flex items-center justify-center gap-2 cursor-pointer animate-pulse"
             >
-              <Award className="w-4 h-4" /> MEJORAR HABILIDADES
+              🪜 DESCENDER AL PISO {quest.number + 1} (PARTIDA LARGA CONTINUA)
             </button>
           )}
 
-          <button
-            onClick={onNextOrRetry}
-            className={`px-6 py-3 rounded font-pixel text-xs transition border flex items-center justify-center gap-2 font-bold cursor-pointer ${
-              isVictory
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-stone-950 border-emerald-400'
-                : 'bg-red-700 hover:bg-red-600 text-stone-100 border-red-500'
-            }`}
-          >
-            {isVictory ? (
-              <>
-                CONTINUAR AL CAMPAMENTO <ChevronRight className="w-4 h-4" />
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" /> REINTENTAR MISIÓN
-              </>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+            {isVictory && (
+              <button
+                onClick={onOpenSkills}
+                className="px-4 py-2.5 bg-amber-700 hover:bg-amber-600 text-stone-950 font-pixel text-xs rounded border border-amber-400 font-bold transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Award className="w-4 h-4" /> MEJORAR HABILIDADES
+              </button>
             )}
-          </button>
+
+            <button
+              onClick={onNextOrRetry}
+              className={`px-5 py-2.5 rounded font-pixel text-xs transition border flex items-center justify-center gap-2 font-bold cursor-pointer ${
+                isVictory
+                  ? 'bg-stone-800 hover:bg-stone-700 text-amber-300 border-stone-600'
+                  : 'bg-red-700 hover:bg-red-600 text-stone-100 border-red-500'
+              }`}
+            >
+              {isVictory ? (
+                <>
+                  CONTINUAR AL MENÚ <ChevronRight className="w-4 h-4" />
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" /> REINTENTAR MISIÓN
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

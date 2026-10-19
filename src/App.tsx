@@ -5,6 +5,7 @@ import { createInitialHeroes } from './data/heroesData';
 import { rollCombatDice, rollMovementDice } from './utils/dice';
 import { audio } from './utils/audio';
 import { canCrossBoundary, getSmartAIMove, getMonsterMovePath } from './utils/pathfinding';
+import { generateProceduralQuest } from './utils/dungeonGenerator';
 
 import { TitleScreen } from './components/TitleScreen';
 import { DungeonBoard } from './components/DungeonBoard';
@@ -24,6 +25,7 @@ export default function App() {
   const [heroes, setHeroes] = useState<Hero[]>(() => createInitialHeroes());
   const [selectedQuest, setSelectedQuest] = useState<Quest>(QUESTS[0]);
   const [activeQuest, setActiveQuest] = useState<Quest>(QUESTS[0]);
+  const [currentFloor, setCurrentFloor] = useState<number>(1);
 
   // Turn management
   const [activeHeroIndex, setActiveHeroIndex] = useState<number>(0);
@@ -172,7 +174,7 @@ export default function App() {
     return moves;
   }, [movementRemaining, activeHero, isMorcarTurn, isTileWalkable]);
 
-  // Targetable monsters for attack
+  // Targetable monsters for attack (Supports 8-directional melee: orthogonal + diagonal!)
   const targetableMonsters = React.useMemo(() => {
     if (hasActed || activeHero.isDead || isMorcarTurn) return [];
 
@@ -182,15 +184,26 @@ export default function App() {
       .filter((m) => {
         if (m.isDead || !m.revealed) return false;
 
-        const dist = Math.abs(m.x - activeHero.x) + Math.abs(m.y - activeHero.y);
+        const dx = Math.abs(m.x - activeHero.x);
+        const dy = Math.abs(m.y - activeHero.y);
+
         if (hasCrossbow) {
-          return dist <= 5;
+          return dx + dy <= 5;
         }
-        // Orthogonal melee attack: distance 1
-        return dist === 1;
+
+        // 8-directional melee adjacency: touches hero tile in any of the 8 directions!
+        const isAdjacent = dx <= 1 && dy <= 1 && (dx + dy > 0);
+        if (!isAdjacent) return false;
+
+        // Ensure not separated by a solid stone wall without a door
+        if (!canCrossBoundary(activeHero.x, activeHero.y, m.x, m.y, activeQuest.rooms, activeQuest.doors)) {
+          return false;
+        }
+
+        return true;
       })
       .map((m) => m.id);
-  }, [hasActed, activeHero, isMorcarTurn, activeQuest.monsters]);
+  }, [hasActed, activeHero, isMorcarTurn, activeQuest.monsters, activeQuest.rooms, activeQuest.doors]);
 
   // Adjacent closed doors
   const adjacentDoors = React.useMemo(() => {
@@ -278,9 +291,16 @@ export default function App() {
 
       if (updatedHero.isDead) {
         addLog(`💀 ¡${updatedHero.name} ha muerto en las profundidades de la mazmorra!`, 'danger');
+      } else if (x === activeQuest.exitPosition.x && y === activeQuest.exitPosition.y) {
+        const anyLivingBoss = activeQuest.monsters.some((m) => m.isBoss && !m.isDead && m.revealed);
+        if (!anyLivingBoss) {
+          audio.playFanfare();
+          addLog(`🪜 ¡${updatedHero.name} alcanza la escalera de salida/descenso! ¡Objetivo cumplido!`, 'loot');
+          setOutcomeState({ isOpen: true, isVictory: true });
+        }
       }
     },
-    [movementRemaining, activeQuest.traps, activeHero, addLog]
+    [movementRemaining, activeQuest, activeHero, addLog]
   );
 
   // Directional move (for Arrow keys, WASD, and D-Pad)

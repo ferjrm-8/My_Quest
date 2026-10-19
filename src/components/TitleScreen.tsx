@@ -14,6 +14,7 @@ interface TitleScreenProps {
   onOpenInstructions: () => void;
   onOpenLore: (initialHero?: HeroClass) => void;
   onOpenSkills: () => void;
+  onGenerateRandomQuest?: (size: 'standard' | 'epic') => void;
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
@@ -26,6 +27,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onOpenInstructions,
   onOpenLore,
   onOpenSkills,
+  onGenerateRandomQuest,
 }) => {
   const [playerCount, setPlayerCount] = useState<number>(1);
   const [bgmActive, setBgmActive] = useState<boolean>(audio.getBgmState());
@@ -229,12 +231,40 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         <div className="md:col-span-5 flex flex-col justify-between space-y-4">
           {/* Quest Selection Box */}
           <div className="bg-stone-900 border-2 border-stone-700 rounded-lg p-5 shadow-xl space-y-3">
-            <span className="font-pixel text-xs text-amber-300 flex items-center gap-2 font-bold">
-              <Scroll className="w-4 h-4 text-amber-400" />
-              3. SELECCIÓN DE MISIÓN:
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="font-pixel text-xs text-amber-300 flex items-center gap-2 font-bold">
+                <Scroll className="w-4 h-4 text-amber-400" />
+                3. SELECCIÓN DE MISIÓN:
+              </span>
+            </div>
 
-            <div className="space-y-2">
+            {/* Quick Generator Buttons */}
+            {onGenerateRandomQuest && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    audio.playSpell();
+                    onGenerateRandomQuest('standard');
+                  }}
+                  className="p-2 bg-gradient-to-r from-purple-950 to-indigo-950 hover:from-purple-900 hover:to-indigo-900 text-purple-200 rounded border border-purple-500 font-pixel text-[10px] flex items-center justify-center gap-1 font-bold cursor-pointer transition shadow"
+                  title="Generar una nueva mazmorra 100% aleatoria"
+                >
+                  <span>🎲 NUEVA ALEATORIA</span>
+                </button>
+                <button
+                  onClick={() => {
+                    audio.playFanfare();
+                    onGenerateRandomQuest('epic');
+                  }}
+                  className="p-2 bg-gradient-to-r from-red-950 to-amber-950 hover:from-red-900 hover:to-amber-900 text-amber-200 rounded border border-amber-500 font-pixel text-[10px] flex items-center justify-center gap-1 font-bold cursor-pointer transition shadow"
+                  title="Generar una incursión extendida con 10+ salas y más jefes"
+                >
+                  <span>🏰 PARTIDA LARGA ÉPICA</span>
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
               {quests.map((q) => (
                 <button
                   key={q.id}
