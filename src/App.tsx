@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Hero, HeroClass, Quest, Monster, Door, Furniture, GameLog, CombatState, Spell } from './types/heroquest';
 import { QUESTS } from './data/questsData';
 import { createInitialHeroes } from './data/heroesData';
 import { rollCombatDice, rollMovementDice } from './utils/dice';
 import { audio } from './utils/audio';
+import { canCrossBoundary, getSmartAIMove, getMonsterMovePath } from './utils/pathfinding';
 
 import { TitleScreen } from './components/TitleScreen';
 import { DungeonBoard } from './components/DungeonBoard';
@@ -31,6 +32,9 @@ export default function App() {
   const [movementRemaining, setMovementRemaining] = useState<number>(0);
   const [hasRolledMovement, setHasRolledMovement] = useState<boolean>(false);
   const [hasActed, setHasActed] = useState<boolean>(false);
+
+  // AI companion visited tiles tracking (prevents oscillation)
+  const aiVisitedThisTurn = useRef<Set<string>>(new Set());
 
   // Modals
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
@@ -87,6 +91,7 @@ export default function App() {
     setMovementRemaining(0);
     setHasRolledMovement(false);
     setHasActed(false);
+    aiVisitedThisTurn.current.clear();
     setGamePhase('dungeon');
     setOutcomeState({ isOpen: false, isVictory: false });
 
@@ -101,42 +106,40 @@ export default function App() {
     [activeQuest.rooms]
   );
 
-  // Check if tile is walkable
+  // Check if tile is walkable for the active hero
   const isTileWalkable = useCallback(
     (x: number, y: number) => {
       if (x < 0 || x >= activeQuest.mapWidth || y < 0 || y >= activeQuest.mapHeight) return false;
 
-      // Cannot walk into closed door
+      // 1. Strict room wall collision: you CANNOT cross between room and corridor (or between rooms) without an OPEN door!
+      if (!canCrossBoundary(activeHero.x, activeHero.y, x, y, activeQuest.rooms, activeQuest.doors)) {
+        return false;
+      }
+
+      // 2. Closed doors block movement
       const closedDoor = activeQuest.doors.find((d) => d.x === x && d.y === y && !d.isOpen);
       if (closedDoor) return false;
 
-      // Cannot walk through furniture
+      // 3. Furniture blocks movement
       const hasFurn = activeQuest.furniture.some(
         (f) => x >= f.x && x < f.x + f.w && y >= f.y && y < f.y + f.h
       );
       if (hasFurn) return false;
 
-      // Cannot walk onto other living hero
+      // 4. Other heroes block tile
       const hasHero = heroes.some((h) => !h.isDead && h.x === x && h.y === y);
       if (hasHero) return false;
 
-      // Cannot walk onto living monster
+      // 5. Living monsters block tile
       const hasMonster = activeQuest.monsters.some((m) => !m.isDead && m.revealed && m.x === x && m.y === y);
       if (hasMonster) return false;
 
-      // Cannot walk into an unrevealed room through a solid wall
+      // 6. Cannot walk into an unrevealed room through solid walls
       const targetRoom = getRoomAt(x, y);
       if (targetRoom && !targetRoom.revealed) {
-        return false;
-      }
-
-      // Wall boundary check between different rooms
-      const currentRoom = getRoomAt(activeHero.x, activeHero.y);
-      if (currentRoom && targetRoom && currentRoom.id !== targetRoom.id) {
+        // Can only enter if an open door connects to this room
         const hasOpenDoor = activeQuest.doors.some(
-          (d) =>
-            d.isOpen &&
-            ((d.x === x && d.y === y) || (d.x === activeHero.x && d.y === activeHero.y))
+          (d) => d.isOpen && ((d.x === x && d.y === y) || (d.tileA && d.tileA.x === x && d.tileA.y === y))
         );
         if (!hasOpenDoor) return false;
       }
@@ -309,7 +312,6 @@ export default function App() {
     if (gamePhase !== 'dungeon' || isMorcarTurn || activeHero.isAI || activeHero.isDead) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if modal is open
       if (combatState || showSpellDialog || showInstructions || showLore || showSkills || outcomeState.isOpen) {
         return;
       }
@@ -373,7 +375,7 @@ export default function App() {
       doors: updatedDoors,
     }));
 
-    addLog(`🚪 ${activeHero.name} abre la puerta con un chirrido de goznes. ¡La sala se revela!`, 'info');
+    addLog(`🚪 ${activeHero.name} abre la puerta de roble. ¡La sala se revela con sus peligros!`, 'info');
   };
 
   // ACTION: Open Adjacent Door from button
@@ -401,7 +403,7 @@ export default function App() {
     setActiveQuest((prev) => ({ ...prev, furniture: updatedFurn }));
     setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
 
-    addLog(`📦 ${activeHero.name} abre y registra el ${furn.name} y encuentra ${finalGold} monedas de oro.`, 'loot');
+    addLog(`📦 ${activeHero.name} abre el ${furn.name} y encuentra ${finalGold} monedas de oro!`, 'loot');
   };
 
   // ACTION: Search Adjacent Furniture from button
@@ -414,6 +416,10 @@ export default function App() {
   // ACTION: Attack Monster
   const handleMonsterClick = (monster: Monster) => {
     if (hasActed || activeHero.isDead) return;
+
+    if (monster.isBoss) {
+      addLog(`⚡ ¡COMBATE CONTRA EL JEFE! ${activeHero.name} ataca a ${monster.name}!`, 'danger');
+    }
 
     // Roll Combat Dice for Hero and Monster
     const attackerRoll = rollCombatDice(activeHero.attackDice);
@@ -437,6 +443,7 @@ export default function App() {
       damageDealt: damage,
       resolved: false,
       targetId: monster.id,
+      isBoss: Boolean(monster.isBoss),
     });
   };
 
@@ -444,7 +451,7 @@ export default function App() {
   const handleConfirmCombat = () => {
     if (!combatState) return;
 
-    const { targetId, damageDealt = 0, defenderName, attackerName, defenderType } = combatState;
+    const { targetId, damageDealt = 0, defenderName, attackerName, defenderType, isBoss } = combatState;
 
     if (defenderType === 'monster') {
       const monster = activeQuest.monsters.find((m) => m.id === targetId);
@@ -467,14 +474,17 @@ export default function App() {
           };
           setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
 
-          addLog(
-            `⚔️ ¡${attackerName} destruye a ${monster.name}! Gana +${monster.bountyGold}🪙 de botín y +${monster.bountyExp}💎 Punto de Habilidad.`,
-            'combat'
-          );
-
-          if (monster.type === 'gargoyle') {
-            addLog(`🏆 ¡LA GÁRGOLA VERAG HA CAÍDO! Las catacumbas se estremecen con vuestra gloria.`, 'loot');
+          if (isBoss) {
+            addLog(
+              `🏆 ¡EL JEFE SUPREMO ${monster.name.toUpperCase()} HA SIDO ANIQUILADO! ¡Mentor proclama vuestra victoria!`,
+              'loot'
+            );
             setOutcomeState({ isOpen: true, isVictory: true });
+          } else {
+            addLog(
+              `⚔️ ¡${attackerName} destruye a ${monster.name}! Gana +${monster.bountyGold}🪙 y +${monster.bountyExp}💎 PH.`,
+              'combat'
+            );
           }
         } else {
           addLog(
@@ -500,14 +510,14 @@ export default function App() {
 
         if (isDead) {
           audio.playDamage();
-          addLog(`💀 ¡${hero.name} ha caído en combate a manos de ${attackerName}!`, 'danger');
+          addLog(`💀 ¡${hero.name} ha caído en combate ante el ataque de ${attackerName}!`, 'danger');
 
           const allDead = heroes.every((h) => (h.id === hero.id ? true : h.isDead));
           if (allDead) {
             setOutcomeState({ isOpen: true, isVictory: false });
           }
         } else {
-          addLog(`🛡️ ${attackerName} golpea a ${hero.name} causando ${damageDealt} de daño.`, 'combat');
+          addLog(`🛡️ ${attackerName} hiere a ${hero.name} infligiendo ${damageDealt} de daño.`, 'combat');
         }
       }
     }
@@ -528,12 +538,12 @@ export default function App() {
     setActiveQuest((prev) => ({ ...prev, rooms: updatedRooms }));
 
     const rand = Math.random();
-    if (rand < 0.4) {
+    if (rand < 0.45) {
       const gold = Math.floor(Math.random() * 40) + 20;
       const updatedHero: Hero = { ...activeHero, gold: activeHero.gold + gold };
       setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
-      addLog(`💰 ${activeHero.name} busca tesoro en la sala y encuentra una bolsa con ${gold} monedas de oro!`, 'loot');
-    } else if (rand < 0.7) {
+      addLog(`💰 ${activeHero.name} encuentra un cofre oculto con ${gold} monedas de oro!`, 'loot');
+    } else if (rand < 0.75) {
       const potion = {
         id: `potion_${Date.now()}`,
         name: 'Poción de Curación',
@@ -547,10 +557,10 @@ export default function App() {
       };
       const updatedHero: Hero = { ...activeHero, inventory: [...activeHero.inventory, potion] };
       setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
-      addLog(`🧪 ¡${activeHero.name} encuentra una Poción de Curación escondida entre los ladrillos!`, 'loot');
+      addLog(`🧪 ¡${activeHero.name} halla una Poción de Curación milagrosa!`, 'loot');
     } else {
       audio.playTrap();
-      addLog(`⚠️ ¡CUIDADO! Monstruo errante: Un Goblin surge de las sombras atacando a ${activeHero.name}!`, 'trap');
+      addLog(`⚠️ ¡EMBOSCADA! Un Goblin surge de las grietas atacando a ${activeHero.name}!`, 'trap');
       const ambushMonster = {
         id: `ambush_${Date.now()}`,
         type: 'goblin' as const,
@@ -603,9 +613,9 @@ export default function App() {
     }
 
     if (foundCount > 0) {
-      addLog(`⚠️ ¡${activeHero.name} detecta con éxito ${foundCount} trampa(s) oculta(s) en la zona!`, 'trap');
+      addLog(`⚠️ ¡${activeHero.name} detecta con pericia ${foundCount} trampa(s) mortal(es)!`, 'trap');
     } else {
-      addLog(`🔍 ${activeHero.name} examina el suelo con atención: No hay trampas visibles a su alcance.`, 'info');
+      addLog(`🔍 ${activeHero.name} inspecciona las losas: No hay trampas perceptibles.`, 'info');
     }
 
     setHasActed(true);
@@ -626,7 +636,7 @@ export default function App() {
       const updatedHero: Hero = { ...activeHero, gold: activeHero.gold + 25, skillPoints: activeHero.skillPoints + 1 };
       setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
       addLog(
-        `⛏️ ¡${activeHero.name} (Enano) desarma la trampa con destreza inigualable y recupera 25🪙 de engranajes!`,
+        `⛏️ ¡${activeHero.name} (Enano) neutraliza la trampa a la perfección y recupera 25🪙!`,
         'loot'
       );
     } else {
@@ -639,11 +649,11 @@ export default function App() {
           bodyPoints: Math.max(0, activeHero.bodyPoints - nearbyTrap.damage),
         };
         setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
-        addLog(`💥 ¡FALLO! La ganzúa resbaló y la trampa detonó hiriendo a ${activeHero.name}.`, 'trap');
+        addLog(`💥 ¡FALLO! La trampa detonó hiriendo a ${activeHero.name}.`, 'trap');
       } else {
         audio.playLoot();
         nearbyTrap.sprung = true;
-        addLog(`🛠️ ¡${activeHero.name} desarma con éxito la trampa peligrosa!`, 'loot');
+        addLog(`🛠️ ¡${activeHero.name} desactiva la trampa con éxito!`, 'loot');
       }
     }
 
@@ -661,7 +671,7 @@ export default function App() {
       if (ally) {
         const healed = Math.min(ally.maxBodyPoints, ally.bodyPoints + spell.value);
         setHeroes((prev) => prev.map((h) => (h.id === targetId ? { ...h, bodyPoints: healed } : h)));
-        addLog(`✨ ¡${activeHero.name} lanza ${spell.name} sanando ${spell.value} PV a ${ally.name}!`, 'spell');
+        addLog(`✨ ¡${activeHero.name} lanza ${spell.name} curando ${spell.value} PV a ${ally.name}!`, 'spell');
       }
     } else if (spell.effectType === 'damage') {
       const monster = activeQuest.monsters.find((m) => m.id === targetId);
@@ -673,8 +683,8 @@ export default function App() {
           monsters: prev.monsters.map((m) => (m.id === targetId ? { ...m, bodyPoints: newHp, isDead } : m)),
         }));
         if (isDead) {
-          addLog(`🔥 ¡El conjuro ${spell.name} incinera y aniquila a ${monster.name}!`, 'spell');
-          if (monster.type === 'gargoyle') {
+          addLog(`🔥 ¡El conjuro ${spell.name} calcina y destruye a ${monster.name}!`, 'spell');
+          if (monster.isBoss) {
             setOutcomeState({ isOpen: true, isVictory: true });
           }
         } else {
@@ -687,12 +697,12 @@ export default function App() {
         setHeroes((prev) =>
           prev.map((h) => (h.id === targetId ? { ...h, defendDice: h.defendDice + 1 } : h))
         );
-        addLog(`🪨 ¡${activeHero.name} envuelve a ${ally.name} en ${spell.name} (+1 Dado de Defensa)!`, 'spell');
+        addLog(`🪨 ¡${activeHero.name} otorga ${spell.name} (+1 Dado Def) a ${ally.name}!`, 'spell');
       }
     } else if (spell.effectType === 'sleep' || spell.effectType === 'tempest') {
       const monster = activeQuest.monsters.find((m) => m.id === targetId);
       if (monster) {
-        addLog(`💤 ¡${monster.name} queda sumido en un letargo mágico por ${spell.name}!`, 'spell');
+        addLog(`💤 ¡${monster.name} queda sumido en letargo mágico por ${spell.name}!`, 'spell');
       }
     }
 
@@ -704,23 +714,23 @@ export default function App() {
     setMovementRemaining(0);
     setHasRolledMovement(false);
     setHasActed(false);
+    aiVisitedThisTurn.current.clear();
 
     let nextIndex = activeHeroIndex + 1;
-    // Skip dead heroes
     while (nextIndex < heroes.length && heroes[nextIndex].isDead) {
       nextIndex++;
     }
 
     if (nextIndex >= heroes.length) {
       setIsMorcarTurn(true);
-      addLog(`💀 TURNO DE MORCAR: El Señor del Caos mueve sus criaturas en las sombras...`, 'danger');
+      addLog(`💀 TURNO DE MORCAR: ¡Las criaturas de las tinieblas se movilizan y atacan!`, 'danger');
     } else {
       setActiveHeroIndex(nextIndex);
       addLog(`Turno de ${heroes[nextIndex].name} (${heroes[nextIndex].title}).`, 'turn');
     }
   }, [activeHeroIndex, heroes, addLog]);
 
-  // Morcar's Turn Execution
+  // Morcar's Turn: MONSTERS ADVANCE AND ATTACK!
   const handleMorcarStep = () => {
     audio.playDamage();
 
@@ -730,13 +740,24 @@ export default function App() {
       return;
     }
 
-    const revealedMonsters = activeQuest.monsters.filter((m) => !m.isDead && m.revealed);
+    const updatedMonsters = activeQuest.monsters.map((m) => ({ ...m }));
     let attacksMade = 0;
 
-    revealedMonsters.forEach((monster) => {
+    updatedMonsters.forEach((monster) => {
+      if (monster.isDead || !monster.revealed) return;
+
+      // 1. Monsters move along shortest path towards closest hero!
+      const movePath = getMonsterMovePath(monster, activeQuest, livingHeroes, updatedMonsters);
+      if (movePath.length > 0) {
+        const dest = movePath[movePath.length - 1];
+        monster.x = dest.x;
+        monster.y = dest.y;
+        addLog(`👹 ${monster.name} avanza ${movePath.length} casillas acechando a los héroes.`, 'danger');
+      }
+
+      // 2. Check if adjacent to a living hero to attack
       let closestHero = livingHeroes[0];
       let minDistance = 999;
-
       livingHeroes.forEach((hero) => {
         const d = Math.abs(hero.x - monster.x) + Math.abs(hero.y - monster.y);
         if (d < minDistance) {
@@ -768,9 +789,12 @@ export default function App() {
           damageDealt: dmg,
           resolved: false,
           targetId: closestHero.id,
+          isBoss: Boolean(monster.isBoss),
         });
       }
     });
+
+    setActiveQuest((prev) => ({ ...prev, monsters: updatedMonsters }));
 
     if (attacksMade === 0) {
       addLog(`Los monstruos de Morcar vigilan los pasillos sin entablar combate en este asalto.`, 'info');
@@ -783,7 +807,7 @@ export default function App() {
     setActiveHeroIndex(firstLivingIndex >= 0 ? firstLivingIndex : 0);
   };
 
-  // Automated AI Hero behavior
+  // Automated Smart AI Hero behavior (Never oscillates!)
   useEffect(() => {
     if (gamePhase !== 'dungeon' || isMorcarTurn || !activeHero.isAI || activeHero.isDead || combatState) {
       return;
@@ -811,16 +835,26 @@ export default function App() {
         return;
       }
 
-      // 4. If can move and valid moves exist, move 1 step
-      if (movementRemaining > 0 && validMoves.length > 0) {
-        const nextStep = validMoves[0];
-        handleTileClick(nextStep.x, nextStep.y);
-        return;
+      // 4. If can move, use smart BFS pathfinder towards monsters or closed doors
+      if (movementRemaining > 0) {
+        const smartStep = getSmartAIMove(
+          activeHero,
+          activeQuest,
+          heroes,
+          activeQuest.monsters,
+          aiVisitedThisTurn.current
+        );
+
+        if (smartStep) {
+          aiVisitedThisTurn.current.add(`${smartStep.x},${smartStep.y}`);
+          handleTileClick(smartStep.x, smartStep.y);
+          return;
+        }
       }
 
-      // 5. If nothing else to do, end turn
+      // 5. If no other moves, end turn
       handleEndTurn();
-    }, 800);
+    }, 700);
 
     return () => clearTimeout(aiTimer);
   }, [
@@ -830,10 +864,11 @@ export default function App() {
     hasRolledMovement,
     hasActed,
     movementRemaining,
-    validMoves,
     targetableMonsters,
     adjacentDoors,
     combatState,
+    activeQuest,
+    heroes,
     handleEndTurn,
     handleTileClick,
   ]);
@@ -920,7 +955,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Combat Resolution Modal */}
+      {/* Combat Resolution Modal with Boss banner support */}
       {combatState && (
         <CombatModal
           isOpen={Boolean(combatState)}
@@ -935,6 +970,7 @@ export default function App() {
           attackerRoll={combatState.attackerRoll}
           defenderRoll={combatState.defenderRoll}
           damageDealt={combatState.damageDealt}
+          isBoss={combatState.isBoss}
           onConfirm={handleConfirmCombat}
         />
       )}

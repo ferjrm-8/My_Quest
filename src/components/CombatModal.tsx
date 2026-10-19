@@ -17,6 +17,7 @@ interface CombatModalProps {
   attackerRoll?: CombatDiceRoll;
   defenderRoll?: CombatDiceRoll;
   damageDealt?: number;
+  isBoss?: boolean;
   onConfirm: () => void;
 }
 
@@ -33,6 +34,7 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   attackerRoll,
   defenderRoll,
   damageDealt = 0,
+  isBoss = false,
   onConfirm,
 }) => {
   const [animStep, setAnimStep] = useState<'rolling' | 'attack_shown' | 'defend_shown' | 'done'>('rolling');
@@ -81,14 +83,25 @@ export const CombatModal: React.FC<CombatModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-2xl bg-stone-900 border-4 border-red-700 rounded-lg shadow-2xl overflow-hidden text-stone-200">
         {/* Header */}
-        <div className="bg-gradient-to-r from-red-950 via-stone-950 to-red-950 p-4 border-b-2 border-red-700 flex items-center justify-between">
+        <div className={`p-4 border-b-2 flex items-center justify-between ${
+          isBoss 
+            ? 'bg-gradient-to-r from-red-950 via-yellow-950 to-red-950 border-yellow-500 shadow-lg' 
+            : 'bg-gradient-to-r from-red-950 via-stone-950 to-red-950 border-red-700'
+        }`}>
           <div className="flex items-center gap-3">
-            <Swords className="w-6 h-6 text-red-500 animate-pulse" />
-            <h3 className="font-pixel text-base text-red-400 uppercase tracking-wider">
-              COMBATE HEROQUEST
-            </h3>
+            <Swords className={`w-6 h-6 animate-pulse ${isBoss ? 'text-yellow-400' : 'text-red-500'}`} />
+            <div>
+              <h3 className={`font-pixel text-base uppercase tracking-wider ${isBoss ? 'text-yellow-300 font-extrabold' : 'text-red-400'}`}>
+                {isBoss ? '★ BATALLA CONTRA EL JEFE DE LA MAZMORRA ★' : 'COMBATE HEROQUEST'}
+              </h3>
+              {isBoss && (
+                <div className="text-[10px] font-pixel text-red-300">
+                  ¡CRIATURA COLOSAL DE MORCAR!
+                </div>
+              )}
+            </div>
           </div>
-          <span className="text-xs font-pixel text-stone-400">
+          <span className="text-xs font-pixel text-stone-300 bg-stone-950 px-2 py-1 rounded border border-stone-800">
             {attackerType === 'hero' ? 'ATAQUE DEL HÉROE' : 'CONTRAATAQUE DE MORCAR'}
           </span>
         </div>

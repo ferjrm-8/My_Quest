@@ -135,11 +135,12 @@ export function createMonster(
   type: MonsterType,
   x: number,
   y: number,
-  options?: { customName?: string; bonusHp?: number; roomId?: string }
+  options?: { customName?: string; bonusHp?: number; roomId?: string; isBoss?: boolean }
 ): Monster {
   const template = MONSTER_TEMPLATES[type];
   monsterCount++;
   const maxHp = template.bodyPoints + (options?.bonusHp || 0);
+  const isBoss = options?.isBoss ?? (type === 'gargoyle');
 
   return {
     id: `m_${type}_${monsterCount}_${Date.now()}`,
@@ -156,9 +157,10 @@ export function createMonster(
     roomId: options?.roomId,
     revealed: false,
     isDead: false,
-    bountyGold: template.bountyGold,
-    bountyExp: template.bountyExp,
+    bountyGold: isBoss ? template.bountyGold * 2 : template.bountyGold,
+    bountyExp: isBoss ? template.bountyExp + 2 : template.bountyExp,
     icon: template.icon,
     color: template.color,
+    isBoss,
   };
 }

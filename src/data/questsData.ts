@@ -80,15 +80,15 @@ export const QUESTS: Quest[] = [
     ],
     doors: [
       // Start room door opening south to corridor
-      { id: 'd1', x: 2, y: 5, orientation: 'horizontal', isOpen: false, connectsRooms: ['start_room', 'corridor'] },
+      { id: 'd1', x: 2, y: 5, orientation: 'horizontal', isOpen: false, connectsRooms: ['start_room', 'corridor'], tileA: { x: 2, y: 4 }, tileB: { x: 2, y: 5 } },
       // Guard room door opening south
-      { id: 'd2', x: 10, y: 5, orientation: 'horizontal', isOpen: false, connectsRooms: ['guard_room', 'corridor'] },
+      { id: 'd2', x: 10, y: 5, orientation: 'horizontal', isOpen: false, connectsRooms: ['guard_room', 'corridor'], tileA: { x: 10, y: 4 }, tileB: { x: 10, y: 5 } },
       // Crypt door opening east
-      { id: 'd3', x: 6, y: 10, orientation: 'vertical', isOpen: false, connectsRooms: ['crypt', 'corridor'] },
+      { id: 'd3', x: 6, y: 10, orientation: 'vertical', isOpen: false, connectsRooms: ['crypt', 'corridor'], tileA: { x: 5, y: 10 }, tileB: { x: 6, y: 10 } },
       // Central hall door opening north
-      { id: 'd4', x: 9, y: 6, orientation: 'horizontal', isOpen: false, connectsRooms: ['central_hall', 'corridor'] },
+      { id: 'd4', x: 9, y: 5, orientation: 'horizontal', isOpen: false, connectsRooms: ['central_hall', 'corridor'], tileA: { x: 9, y: 6 }, tileB: { x: 9, y: 5 } },
       // Treasury door opening west into central hall
-      { id: 'd5', x: 13, y: 10, orientation: 'vertical', isOpen: false, connectsRooms: ['treasury', 'central_hall'] },
+      { id: 'd5', x: 13, y: 10, orientation: 'vertical', isOpen: false, connectsRooms: ['treasury', 'central_hall'], tileA: { x: 12, y: 10 }, tileB: { x: 13, y: 10 } },
     ],
     secretDoors: [
       { id: 'sd1', x: 1, y: 5, orientation: 'horizontal', revealed: false, isOpen: false },
@@ -239,10 +239,10 @@ export const QUESTS: Quest[] = [
       },
     ],
     doors: [
-      { id: 'qd1', x: 4, y: 2, orientation: 'vertical', isOpen: false, connectsRooms: ['start_room', 'corridor'] },
-      { id: 'qd2', x: 7, y: 3, orientation: 'vertical', isOpen: false, connectsRooms: ['torture_chamber', 'corridor'] },
-      { id: 'qd3', x: 3, y: 7, orientation: 'horizontal', isOpen: false, connectsRooms: ['barracks', 'corridor'] },
-      { id: 'qd4', x: 9, y: 10, orientation: 'vertical', isOpen: false, connectsRooms: ['cell_block', 'corridor'] },
+      { id: 'qd1', x: 4, y: 2, orientation: 'vertical', isOpen: false, connectsRooms: ['start_room', 'corridor'], tileA: { x: 3, y: 2 }, tileB: { x: 4, y: 2 } },
+      { id: 'qd2', x: 7, y: 3, orientation: 'vertical', isOpen: false, connectsRooms: ['torture_chamber', 'corridor'], tileA: { x: 6, y: 3 }, tileB: { x: 7, y: 3 } },
+      { id: 'qd3', x: 3, y: 7, orientation: 'horizontal', isOpen: false, connectsRooms: ['barracks', 'corridor'], tileA: { x: 3, y: 6 }, tileB: { x: 3, y: 7 } },
+      { id: 'qd4', x: 9, y: 10, orientation: 'vertical', isOpen: false, connectsRooms: ['cell_block', 'corridor'], tileA: { x: 8, y: 10 }, tileB: { x: 9, y: 10 } },
     ],
     secretDoors: [],
     traps: [
@@ -279,7 +279,7 @@ export const QUESTS: Quest[] = [
       createMonster('goblin', 8, 3, { roomId: 'torture_chamber' }),
       createMonster('fimir', 3, 9, { roomId: 'barracks' }),
       createMonster('fimir', 4, 10, { roomId: 'barracks' }),
-      createMonster('chaos_warrior', 10, 11, { customName: 'Carcelero del Caos', roomId: 'cell_block' }),
+      createMonster('chaos_warrior', 10, 11, { customName: 'Carcelero del Caos', roomId: 'cell_block', isBoss: true }),
       createMonster('goblin', 11, 10, { roomId: 'cell_block' }),
     ],
   },

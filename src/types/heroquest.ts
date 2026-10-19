@@ -113,6 +113,7 @@ export interface Monster {
   bountyExp: number;
   icon: string;
   color: string;
+  isBoss?: boolean;
 }
 
 export type TileType = 'floor' | 'wall' | 'corridor' | 'empty';
@@ -138,6 +139,8 @@ export interface Door {
   orientation: 'horizontal' | 'vertical';
   isOpen: boolean;
   connectsRooms: [string, string]; // room IDs or corridor
+  tileA: { x: number; y: number };
+  tileB: { x: number; y: number };
 }
 
 export interface Trap {
@@ -220,6 +223,7 @@ export interface CombatState {
   damageDealt?: number;
   resolved: boolean;
   targetId: string;
+  isBoss?: boolean;
 }
 
 export interface GameLog {
