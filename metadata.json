@@ -1,0 +1,6 @@
+{
+  "name": "HeroQuest: Crónicas de Morcar",
+  "description": "Emulación fiel en 16 bits del legendario juego de mesa HeroQuest con combates por dados, selección de personajes, mazmorras y progresión de habilidades.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
