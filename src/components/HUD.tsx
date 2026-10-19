@@ -14,12 +14,17 @@ import {
   Heart,
   Brain,
   Shield,
-  Clock,
   ChevronRight,
   ListFilter,
   CheckCircle2,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  DoorOpen,
+  Package,
 } from 'lucide-react';
-import { Hero, Quest, GameLog, Monster } from '../types/heroquest';
+import { Hero, Quest, GameLog, Door, Furniture } from '../types/heroquest';
 import { HeroPortrait } from './PixelIcons';
 import { audio } from '../utils/audio';
 
@@ -30,13 +35,15 @@ interface HUDProps {
   isMorcarTurn: boolean;
   roundNumber: number;
   movementRemaining: number;
-  hasMoved: boolean;
+  hasRolledMovement: boolean;
   hasActed: boolean;
   canAttack: boolean;
   canCastSpell: boolean;
   canSearchTreasure: boolean;
   canSearchTraps: boolean;
   canDisarmTrap: boolean;
+  adjacentDoors: Door[];
+  adjacentFurniture: Furniture[];
   logs: GameLog[];
   onRollMovement: () => void;
   onInitiateAttack: () => void;
@@ -44,6 +51,9 @@ interface HUDProps {
   onSearchTreasure: () => void;
   onSearchTraps: () => void;
   onDisarmTrap: () => void;
+  onOpenAdjacentDoor?: () => void;
+  onSearchAdjacentFurniture?: () => void;
+  onDirectionalMove?: (dir: 'up' | 'down' | 'left' | 'right') => void;
   onEndTurn: () => void;
   onMorcarStep: () => void;
   onOpenSkills: () => void;
@@ -59,13 +69,15 @@ export const HUD: React.FC<HUDProps> = ({
   isMorcarTurn,
   roundNumber,
   movementRemaining,
-  hasMoved,
+  hasRolledMovement,
   hasActed,
   canAttack,
   canCastSpell,
   canSearchTreasure,
   canSearchTraps,
   canDisarmTrap,
+  adjacentDoors,
+  adjacentFurniture,
   logs,
   onRollMovement,
   onInitiateAttack,
@@ -73,6 +85,9 @@ export const HUD: React.FC<HUDProps> = ({
   onSearchTreasure,
   onSearchTraps,
   onDisarmTrap,
+  onOpenAdjacentDoor,
+  onSearchAdjacentFurniture,
+  onDirectionalMove,
   onEndTurn,
   onMorcarStep,
   onOpenSkills,
@@ -80,7 +95,6 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenLore,
   onReturnToTitle,
 }) => {
-  const [showLogDrawer, setShowLogDrawer] = useState(false);
   const [bgmActive, setBgmActive] = useState(audio.getBgmState());
   const [soundMuted, setSoundMuted] = useState(audio.isMuted());
 
@@ -104,7 +118,7 @@ export const HUD: React.FC<HUDProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={onReturnToTitle}
-            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-400 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-800"
+            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-400 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-800 cursor-pointer"
           >
             ← MENÚ
           </button>
@@ -135,7 +149,7 @@ export const HUD: React.FC<HUDProps> = ({
 
           <button
             onClick={onOpenInstructions}
-            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1"
+            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1 cursor-pointer"
           >
             <BookOpen className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden sm:inline">REGLAS</span>
@@ -143,7 +157,7 @@ export const HUD: React.FC<HUDProps> = ({
 
           <button
             onClick={onOpenLore}
-            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1"
+            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1 cursor-pointer"
           >
             <Scroll className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden sm:inline">HISTORIA</span>
@@ -151,8 +165,8 @@ export const HUD: React.FC<HUDProps> = ({
 
           <button
             onClick={handleToggleSound}
-            className={`p-1.5 rounded border font-pixel text-[10px] ${
-              soundMuted ? 'bg-red-950 border-red-700 text-red-400' : 'bg-stone-950 border-stone-800 text-stone-400'
+            className={`p-1.5 rounded border font-pixel text-[10px] cursor-pointer ${
+              soundMuted ? 'bg-red-950 border-red-700 text-red-400' : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
             }`}
             title="Efectos de sonido"
           >
@@ -161,8 +175,8 @@ export const HUD: React.FC<HUDProps> = ({
 
           <button
             onClick={handleToggleBgm}
-            className={`p-1.5 rounded border font-pixel text-[10px] ${
-              bgmActive ? 'bg-amber-950 border-amber-600 text-amber-300 animate-pulse' : 'bg-stone-950 border-stone-800 text-stone-400'
+            className={`p-1.5 rounded border font-pixel text-[10px] cursor-pointer ${
+              bgmActive ? 'bg-amber-950 border-amber-600 text-amber-300 animate-pulse' : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
             }`}
             title="Música Chiptune 16-bits"
           >
@@ -182,7 +196,7 @@ export const HUD: React.FC<HUDProps> = ({
                 hero.isDead
                   ? 'bg-stone-950/40 border-stone-800 opacity-50'
                   : isActive
-                  ? 'bg-amber-950/70 border-amber-400 shadow-lg scale-102 ring-2 ring-amber-500/50'
+                  ? 'bg-amber-950/70 border-amber-400 shadow-lg ring-2 ring-amber-500/50'
                   : 'bg-stone-900/80 border-stone-800'
               }`}
             >
@@ -256,7 +270,7 @@ export const HUD: React.FC<HUDProps> = ({
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-800 pb-2">
               <div className="flex items-center gap-2 font-pixel text-xs">
-                <span className="text-amber-400">TURNO ACTUAL:</span>
+                <span className="text-amber-400">TURNO:</span>
                 <span className="text-stone-100">{activeHero.name} ({activeHero.title})</span>
                 {activeHero.isAI && (
                   <span className="bg-purple-900 text-purple-200 text-[10px] px-1.5 py-0.5 rounded">
@@ -268,26 +282,78 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Movement dice step counter */}
               <div className="flex items-center gap-2 text-xs font-pixel">
                 <span className="text-stone-400">PASOS RESTANTES:</span>
-                <span className="text-emerald-400 text-sm font-bold bg-stone-950 px-2 py-0.5 rounded border border-stone-800">
+                <span className={`text-sm font-bold px-2 py-0.5 rounded border ${
+                  movementRemaining > 0
+                    ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500 animate-pulse'
+                    : 'text-stone-500 bg-stone-950 border-stone-800'
+                }`}>
                   {movementRemaining}
                 </span>
               </div>
             </div>
 
+            {/* Movement guidance hint */}
+            {movementRemaining > 0 && (
+              <div className="bg-emerald-950/40 border border-emerald-600/70 p-2.5 rounded text-xs flex flex-wrap items-center justify-between gap-2">
+                <div className="text-emerald-300 font-medieval flex items-center gap-1.5">
+                  <Footprints className="w-4 h-4 text-emerald-400 animate-bounce" />
+                  <span>
+                    ¡Tienes <strong>{movementRemaining}</strong> pasos! Haz clic en una casilla verde del tablero, usa las teclas de flechas/WASD, o el teclado direccional a la derecha.
+                  </span>
+                </div>
+
+                {/* On-screen Directional Pad */}
+                {onDirectionalMove && (
+                  <div className="flex items-center gap-1 bg-stone-950 p-1 rounded border border-emerald-700">
+                    <button
+                      onClick={() => onDirectionalMove('left')}
+                      className="p-1.5 bg-stone-800 hover:bg-emerald-700 text-white rounded text-xs transition cursor-pointer"
+                      title="Mover Izquierda (A)"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => onDirectionalMove('up')}
+                        className="p-1.5 bg-stone-800 hover:bg-emerald-700 text-white rounded text-xs transition cursor-pointer"
+                        title="Mover Arriba (W)"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onDirectionalMove('down')}
+                        className="p-1.5 bg-stone-800 hover:bg-emerald-700 text-white rounded text-xs transition cursor-pointer"
+                        title="Mover Abajo (S)"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => onDirectionalMove('right')}
+                      className="p-1.5 bg-stone-800 hover:bg-emerald-700 text-white rounded text-xs transition cursor-pointer"
+                      title="Mover Derecha (D)"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Action Buttons Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
               {/* 1. Move Button */}
               <button
                 onClick={onRollMovement}
-                disabled={hasMoved || activeHero.isDead}
+                disabled={hasRolledMovement || activeHero.isDead}
                 className={`py-2 px-2 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 border transition ${
-                  hasMoved || activeHero.isDead
+                  hasRolledMovement || activeHero.isDead
                     ? 'bg-stone-950 text-stone-600 border-stone-800 cursor-not-allowed'
-                    : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border-emerald-600 shadow-md cursor-pointer'
+                    : 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border-emerald-600 shadow-md cursor-pointer animate-pulse'
                 }`}
               >
                 <Footprints className="w-4 h-4" />
-                <span>MOVER (2d6)</span>
+                <span>{hasRolledMovement ? 'DADOS LANZADOS' : 'MOVER (2d6)'}</span>
               </button>
 
               {/* 2. Attack Button */}
@@ -346,7 +412,7 @@ export const HUD: React.FC<HUDProps> = ({
                 <span>TRAMPAS</span>
               </button>
 
-              {/* 6. Disarm Trap (if near detected trap) */}
+              {/* 6. Disarm Trap */}
               <button
                 onClick={onDisarmTrap}
                 disabled={!canDisarmTrap || hasActed || activeHero.isDead}
@@ -360,7 +426,29 @@ export const HUD: React.FC<HUDProps> = ({
                 <span>DESARMAR</span>
               </button>
 
-              {/* 7. End Turn */}
+              {/* 7. Open Door (when adjacent) */}
+              {adjacentDoors.length > 0 && onOpenAdjacentDoor && (
+                <button
+                  onClick={onOpenAdjacentDoor}
+                  className="py-2 px-2 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 border bg-amber-900 hover:bg-amber-800 text-amber-200 border-amber-400 shadow-lg cursor-pointer animate-pulse"
+                >
+                  <DoorOpen className="w-4 h-4" />
+                  <span>ABRIR PUERTA</span>
+                </button>
+              )}
+
+              {/* 8. Search Furniture (when adjacent) */}
+              {adjacentFurniture.length > 0 && onSearchAdjacentFurniture && (
+                <button
+                  onClick={onSearchAdjacentFurniture}
+                  className="py-2 px-2 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 border bg-yellow-900 hover:bg-yellow-800 text-yellow-200 border-yellow-400 shadow-lg cursor-pointer animate-pulse"
+                >
+                  <Package className="w-4 h-4" />
+                  <span>REGISTRAR COFRE</span>
+                </button>
+              )}
+
+              {/* Final: End Turn */}
               <button
                 onClick={onEndTurn}
                 className="py-2 px-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-600 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 transition cursor-pointer"

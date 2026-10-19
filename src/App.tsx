@@ -29,7 +29,7 @@ export default function App() {
   const [isMorcarTurn, setIsMorcarTurn] = useState<boolean>(false);
   const [roundNumber, setRoundNumber] = useState<number>(1);
   const [movementRemaining, setMovementRemaining] = useState<number>(0);
-  const [hasMoved, setHasMoved] = useState<boolean>(false);
+  const [hasRolledMovement, setHasRolledMovement] = useState<boolean>(false);
   const [hasActed, setHasActed] = useState<boolean>(false);
 
   // Modals
@@ -85,7 +85,7 @@ export default function App() {
     setIsMorcarTurn(false);
     setRoundNumber(1);
     setMovementRemaining(0);
-    setHasMoved(false);
+    setHasRolledMovement(false);
     setHasActed(false);
     setGamePhase('dungeon');
     setOutcomeState({ isOpen: false, isVictory: false });
@@ -124,14 +124,31 @@ export default function App() {
       const hasMonster = activeQuest.monsters.some((m) => !m.isDead && m.revealed && m.x === x && m.y === y);
       if (hasMonster) return false;
 
+      // Cannot walk into an unrevealed room through a solid wall
+      const targetRoom = getRoomAt(x, y);
+      if (targetRoom && !targetRoom.revealed) {
+        return false;
+      }
+
+      // Wall boundary check between different rooms
+      const currentRoom = getRoomAt(activeHero.x, activeHero.y);
+      if (currentRoom && targetRoom && currentRoom.id !== targetRoom.id) {
+        const hasOpenDoor = activeQuest.doors.some(
+          (d) =>
+            d.isOpen &&
+            ((d.x === x && d.y === y) || (d.x === activeHero.x && d.y === activeHero.y))
+        );
+        if (!hasOpenDoor) return false;
+      }
+
       return true;
     },
-    [activeQuest, heroes]
+    [activeQuest, heroes, activeHero, getRoomAt]
   );
 
   // Calculate valid movement tiles for active hero
   const validMoves = React.useMemo(() => {
-    if (movementRemaining <= 0 || hasMoved || activeHero.isDead || isMorcarTurn) return [];
+    if (movementRemaining <= 0 || activeHero.isDead || isMorcarTurn) return [];
 
     const moves: { x: number; y: number }[] = [];
     const dirs = [
@@ -150,7 +167,7 @@ export default function App() {
     });
 
     return moves;
-  }, [movementRemaining, hasMoved, activeHero, isMorcarTurn, isTileWalkable]);
+  }, [movementRemaining, activeHero, isMorcarTurn, isTileWalkable]);
 
   // Targetable monsters for attack
   const targetableMonsters = React.useMemo(() => {
@@ -164,7 +181,6 @@ export default function App() {
 
         const dist = Math.abs(m.x - activeHero.x) + Math.abs(m.y - activeHero.y);
         if (hasCrossbow) {
-          // Line of sight in same row or col or within 5 tiles
           return dist <= 5;
         }
         // Orthogonal melee attack: distance 1
@@ -178,7 +194,7 @@ export default function App() {
     return activeQuest.doors.filter((d) => {
       if (d.isOpen) return false;
       const dist = Math.abs(d.x - activeHero.x) + Math.abs(d.y - activeHero.y);
-      return dist === 1;
+      return dist <= 1;
     });
   }, [activeQuest.doors, activeHero]);
 
@@ -191,7 +207,7 @@ export default function App() {
     });
   }, [activeQuest.furniture, activeHero]);
 
-  // Check if active hero is in a room that hasn't been searched
+  // Check room status
   const activeRoom = getRoomAt(activeHero.x, activeHero.y);
   const canSearchTreasure = Boolean(
     activeRoom &&
@@ -212,7 +228,7 @@ export default function App() {
 
   // ACTION: Roll Movement Dice (2d6)
   const handleRollMovement = () => {
-    if (hasMoved || activeHero.isDead) return;
+    if (hasRolledMovement || activeHero.isDead) return;
 
     audio.playDiceRoll();
     const { die1, die2, total } = rollMovementDice();
@@ -220,7 +236,7 @@ export default function App() {
     const finalSteps = total + moveBonus;
 
     setMovementRemaining(finalSteps);
-    setHasMoved(true);
+    setHasRolledMovement(true);
     addLog(
       `🎲 ${activeHero.name} lanza los dados de movimiento: [${die1}] + [${die2}] = ${finalSteps} casillas.`,
       'info'
@@ -228,39 +244,105 @@ export default function App() {
   };
 
   // ACTION: Move to adjacent tile
-  const handleTileClick = (x: number, y: number) => {
-    if (movementRemaining <= 0) return;
+  const handleTileClick = useCallback(
+    (x: number, y: number) => {
+      if (movementRemaining <= 0) return;
 
-    audio.playStep();
+      audio.playStep();
 
-    // Check if stepping on a trap
-    const trap = activeQuest.traps.find((t) => t.x === x && t.y === y && !t.sprung);
-    let hpDeduction = 0;
+      // Check if stepping on a trap
+      const trap = activeQuest.traps.find((t) => t.x === x && t.y === y && !t.sprung);
+      let hpDeduction = 0;
 
-    if (trap) {
-      audio.playTrap();
-      trap.sprung = true;
-      trap.detected = true;
-      hpDeduction = trap.damage;
-      addLog(`¡PELIGRO! ${activeHero.name} ha caído en una trampa de ${trap.type}! Sufre ${hpDeduction} daño.`, 'trap');
-    }
+      if (trap) {
+        audio.playTrap();
+        trap.sprung = true;
+        trap.detected = true;
+        hpDeduction = trap.damage;
+        addLog(`¡PELIGRO! ${activeHero.name} ha caído en una trampa de ${trap.type}! Sufre ${hpDeduction} daño.`, 'trap');
+      }
 
-    const updatedHero: Hero = {
-      ...activeHero,
-      x,
-      y,
-      bodyPoints: Math.max(0, activeHero.bodyPoints - hpDeduction),
-      isDead: activeHero.bodyPoints - hpDeduction <= 0,
+      const updatedHero: Hero = {
+        ...activeHero,
+        x,
+        y,
+        bodyPoints: Math.max(0, activeHero.bodyPoints - hpDeduction),
+        isDead: activeHero.bodyPoints - hpDeduction <= 0,
+      };
+
+      setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
+      setMovementRemaining((prev) => prev - 1);
+
+      if (updatedHero.isDead) {
+        addLog(`💀 ¡${updatedHero.name} ha muerto en las profundidades de la mazmorra!`, 'danger');
+      }
+    },
+    [movementRemaining, activeQuest.traps, activeHero, addLog]
+  );
+
+  // Directional move (for Arrow keys, WASD, and D-Pad)
+  const handleDirectionalMove = useCallback(
+    (dir: 'up' | 'down' | 'left' | 'right') => {
+      if (movementRemaining <= 0 || activeHero.isDead || isMorcarTurn) return;
+
+      let dx = 0;
+      let dy = 0;
+      if (dir === 'up') dy = -1;
+      else if (dir === 'down') dy = 1;
+      else if (dir === 'left') dx = -1;
+      else if (dir === 'right') dx = 1;
+
+      const targetX = activeHero.x + dx;
+      const targetY = activeHero.y + dy;
+
+      if (isTileWalkable(targetX, targetY)) {
+        handleTileClick(targetX, targetY);
+      } else {
+        audio.playBlock();
+      }
+    },
+    [movementRemaining, activeHero, isMorcarTurn, isTileWalkable, handleTileClick]
+  );
+
+  // Keyboard navigation listener (Arrow keys and WASD)
+  useEffect(() => {
+    if (gamePhase !== 'dungeon' || isMorcarTurn || activeHero.isAI || activeHero.isDead) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if modal is open
+      if (combatState || showSpellDialog || showInstructions || showLore || showSkills || outcomeState.isOpen) {
+        return;
+      }
+
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        handleDirectionalMove('up');
+      } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleDirectionalMove('down');
+      } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        handleDirectionalMove('left');
+      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        handleDirectionalMove('right');
+      }
     };
 
-    setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
-    setMovementRemaining((prev) => prev - 1);
-
-    // If hero died from trap
-    if (updatedHero.isDead) {
-      addLog(`💀 ¡${updatedHero.name} ha muerto en las profundidades de la mazmorra!`, 'danger');
-    }
-  };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    gamePhase,
+    isMorcarTurn,
+    activeHero,
+    combatState,
+    showSpellDialog,
+    showInstructions,
+    showLore,
+    showSkills,
+    outcomeState,
+    handleDirectionalMove,
+  ]);
 
   // ACTION: Open Door
   const handleOpenDoor = (door: Door) => {
@@ -291,7 +373,14 @@ export default function App() {
       doors: updatedDoors,
     }));
 
-    addLog(`🚪 ${activeHero.name} abre la puerta con un chirrido de goznes. ¡La sala se ilumina!`, 'info');
+    addLog(`🚪 ${activeHero.name} abre la puerta con un chirrido de goznes. ¡La sala se revela!`, 'info');
+  };
+
+  // ACTION: Open Adjacent Door from button
+  const handleOpenAdjacentDoor = () => {
+    if (adjacentDoors.length > 0) {
+      handleOpenDoor(adjacentDoors[0]);
+    }
   };
 
   // ACTION: Search Furniture (Chest, Rack, etc.)
@@ -312,7 +401,14 @@ export default function App() {
     setActiveQuest((prev) => ({ ...prev, furniture: updatedFurn }));
     setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
 
-    addLog(`📦 ${activeHero.name} registra el ${furn.name} y encuentra ${finalGold} monedas de oro.`, 'loot');
+    addLog(`📦 ${activeHero.name} abre y registra el ${furn.name} y encuentra ${finalGold} monedas de oro.`, 'loot');
+  };
+
+  // ACTION: Search Adjacent Furniture from button
+  const handleSearchAdjacentFurniture = () => {
+    if (adjacentFurniture.length > 0) {
+      handleFurnitureClick(adjacentFurniture[0]);
+    }
   };
 
   // ACTION: Attack Monster
@@ -364,7 +460,6 @@ export default function App() {
 
         if (isDead) {
           audio.playFanfare();
-          // Give bounty to active hero
           const updatedHero: Hero = {
             ...activeHero,
             gold: activeHero.gold + monster.bountyGold,
@@ -377,7 +472,6 @@ export default function App() {
             'combat'
           );
 
-          // Check if Boss Verag was slain
           if (monster.type === 'gargoyle') {
             addLog(`🏆 ¡LA GÁRGOLA VERAG HA CAÍDO! Las catacumbas se estremecen con vuestra gloria.`, 'loot');
             setOutcomeState({ isOpen: true, isVictory: true });
@@ -408,7 +502,6 @@ export default function App() {
           audio.playDamage();
           addLog(`💀 ¡${hero.name} ha caído en combate a manos de ${attackerName}!`, 'danger');
 
-          // Check if all heroes are dead
           const allDead = heroes.every((h) => (h.id === hero.id ? true : h.isDead));
           if (allDead) {
             setOutcomeState({ isOpen: true, isVictory: false });
@@ -429,13 +522,11 @@ export default function App() {
 
     audio.playLoot();
 
-    // Mark room as searched
     const updatedRooms = activeQuest.rooms.map((r) =>
       r.id === activeRoom.id ? { ...r, treasureSearched: true } : r
     );
     setActiveQuest((prev) => ({ ...prev, rooms: updatedRooms }));
 
-    // Authentic HeroQuest treasure deck outcomes
     const rand = Math.random();
     if (rand < 0.4) {
       const gold = Math.floor(Math.random() * 40) + 20;
@@ -458,7 +549,6 @@ export default function App() {
       setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
       addLog(`🧪 ¡${activeHero.name} encuentra una Poción de Curación escondida entre los ladrillos!`, 'loot');
     } else {
-      // Wandering monster ambush!
       audio.playTrap();
       addLog(`⚠️ ¡CUIDADO! Monstruo errante: Un Goblin surge de las sombras atacando a ${activeHero.name}!`, 'trap');
       const ambushMonster = {
@@ -495,7 +585,6 @@ export default function App() {
 
     let foundCount = 0;
     const updatedTraps = activeQuest.traps.map((t) => {
-      // Detect traps in current room or within 4 tiles in corridor
       const dist = Math.abs(t.x - activeHero.x) + Math.abs(t.y - activeHero.y);
       if (dist <= 4 && !t.detected) {
         foundCount++;
@@ -531,10 +620,9 @@ export default function App() {
     );
     if (!nearbyTrap) return;
 
-    // Dwarf disarms automatically! Other heroes roll 1 combat die (skull = success, black shield = triggers)
     if (activeHero.heroClass === 'dwarf') {
       audio.playLoot();
-      nearbyTrap.sprung = true; // safely neutralized
+      nearbyTrap.sprung = true;
       const updatedHero: Hero = { ...activeHero, gold: activeHero.gold + 25, skillPoints: activeHero.skillPoints + 1 };
       setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
       addLog(
@@ -614,7 +702,7 @@ export default function App() {
   // Next Hero or switch to Morcar
   const handleEndTurn = useCallback(() => {
     setMovementRemaining(0);
-    setHasMoved(false);
+    setHasRolledMovement(false);
     setHasActed(false);
 
     let nextIndex = activeHeroIndex + 1;
@@ -624,7 +712,6 @@ export default function App() {
     }
 
     if (nextIndex >= heroes.length) {
-      // All heroes have finished their turn: switch to Morcar's Turn!
       setIsMorcarTurn(true);
       addLog(`💀 TURNO DE MORCAR: El Señor del Caos mueve sus criaturas en las sombras...`, 'danger');
     } else {
@@ -644,12 +731,9 @@ export default function App() {
     }
 
     const revealedMonsters = activeQuest.monsters.filter((m) => !m.isDead && m.revealed);
-
-    // Each monster approaches closest hero or attacks if adjacent
     let attacksMade = 0;
 
     revealedMonsters.forEach((monster) => {
-      // Find closest living hero
       let closestHero = livingHeroes[0];
       let minDistance = 999;
 
@@ -668,7 +752,6 @@ export default function App() {
         const defRoll = rollCombatDice(closestHero.defendDice);
 
         const hits = atkRoll.skulls;
-        // Heroes defend with White Shields
         const blocks = defRoll.whiteShields;
         const dmg = Math.max(0, hits - blocks);
 
@@ -693,11 +776,9 @@ export default function App() {
       addLog(`Los monstruos de Morcar vigilan los pasillos sin entablar combate en este asalto.`, 'info');
     }
 
-    // End Morcar's turn: return to Hero 0 and increment round
     setIsMorcarTurn(false);
     setRoundNumber((prev) => prev + 1);
 
-    // Find first living hero
     const firstLivingIndex = heroes.findIndex((h) => !h.isDead);
     setActiveHeroIndex(firstLivingIndex >= 0 ? firstLivingIndex : 0);
   };
@@ -709,8 +790,8 @@ export default function App() {
     }
 
     const aiTimer = setTimeout(() => {
-      // 1. If has not moved, roll movement dice
-      if (!hasMoved) {
+      // 1. If has not rolled movement, roll movement dice
+      if (!hasRolledMovement) {
         handleRollMovement();
         return;
       }
@@ -730,7 +811,7 @@ export default function App() {
         return;
       }
 
-      // 4. If can move and valid moves exist, pick step closest to nearest door or monster
+      // 4. If can move and valid moves exist, move 1 step
       if (movementRemaining > 0 && validMoves.length > 0) {
         const nextStep = validMoves[0];
         handleTileClick(nextStep.x, nextStep.y);
@@ -739,14 +820,14 @@ export default function App() {
 
       // 5. If nothing else to do, end turn
       handleEndTurn();
-    }, 900);
+    }, 800);
 
     return () => clearTimeout(aiTimer);
   }, [
     gamePhase,
     isMorcarTurn,
     activeHero,
-    hasMoved,
+    hasRolledMovement,
     hasActed,
     movementRemaining,
     validMoves,
@@ -754,6 +835,7 @@ export default function App() {
     adjacentDoors,
     combatState,
     handleEndTurn,
+    handleTileClick,
   ]);
 
   // Restart quest on victory/defeat
@@ -789,13 +871,15 @@ export default function App() {
             isMorcarTurn={isMorcarTurn}
             roundNumber={roundNumber}
             movementRemaining={movementRemaining}
-            hasMoved={hasMoved}
+            hasRolledMovement={hasRolledMovement}
             hasActed={hasActed}
             canAttack={canAttack}
             canCastSpell={canCastSpell}
             canSearchTreasure={canSearchTreasure}
             canSearchTraps={canSearchTraps}
             canDisarmTrap={canDisarmTrap}
+            adjacentDoors={adjacentDoors}
+            adjacentFurniture={adjacentFurniture}
             logs={logs}
             onRollMovement={handleRollMovement}
             onInitiateAttack={() => {
@@ -806,6 +890,9 @@ export default function App() {
             onSearchTreasure={handleSearchTreasure}
             onSearchTraps={handleSearchTraps}
             onDisarmTrap={handleDisarmTrap}
+            onOpenAdjacentDoor={handleOpenAdjacentDoor}
+            onSearchAdjacentFurniture={handleSearchAdjacentFurniture}
+            onDirectionalMove={handleDirectionalMove}
             onEndTurn={handleEndTurn}
             onMorcarStep={handleMorcarStep}
             onOpenSkills={() => setShowSkills(true)}

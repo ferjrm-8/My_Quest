@@ -34,7 +34,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const handlePlayerCountChange = (count: number) => {
     audio.playLoot();
     setPlayerCount(count);
-    // Assign heroes: first N heroes are players, remaining are AI companions
     const updated = heroes.map((h, idx) => ({
       ...h,
       isAI: idx >= count,
@@ -68,12 +67,12 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-stone-950 flex flex-col justify-between overflow-x-hidden p-4 md:p-6 select-none crt-overlay">
+    <div className="relative min-h-screen w-full bg-stone-950 flex flex-col justify-between overflow-x-hidden p-4 md:p-6 select-none">
       {/* Top Bar with Audio Controls & 16-Bit Brand */}
       <div className="relative z-10 flex items-center justify-between border-b-2 border-stone-800 pb-3">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-red-600 rounded-full animate-ping" />
-          <span className="font-pixel text-[11px] text-amber-500 tracking-wider">
+          <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse" />
+          <span className="font-pixel text-xs text-amber-400 tracking-wider font-bold">
             16-BIT EDITION • MB / GAMES WORKSHOP EMULATION
           </span>
         </div>
@@ -81,44 +80,43 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleToggleSound}
-            className={`p-2 rounded border font-pixel text-[10px] flex items-center gap-1.5 transition ${
+            className={`p-2 rounded border font-pixel text-xs flex items-center gap-1.5 transition cursor-pointer ${
               soundMuted
-                ? 'bg-red-950/80 border-red-700 text-red-400'
-                : 'bg-stone-900 border-stone-700 text-stone-300 hover:text-amber-300'
+                ? 'bg-red-950 border-red-700 text-red-400'
+                : 'bg-stone-900 border-stone-700 text-stone-200 hover:text-amber-300'
             }`}
             title="Activar/Silenciar Efectos de Sonido"
           >
             {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            <span className="hidden sm:inline">{soundMuted ? 'MUDO' : 'SFX'}</span>
+            <span className="hidden sm:inline font-bold">{soundMuted ? 'MUDO' : 'SFX'}</span>
           </button>
 
           <button
             onClick={handleToggleBgm}
-            className={`p-2 rounded border font-pixel text-[10px] flex items-center gap-1.5 transition ${
+            className={`p-2 rounded border font-pixel text-xs flex items-center gap-1.5 transition cursor-pointer ${
               bgmActive
-                ? 'bg-amber-950/80 border-amber-600 text-amber-300 animate-pulse'
-                : 'bg-stone-900 border-stone-700 text-stone-400 hover:text-stone-200'
+                ? 'bg-amber-950 border-amber-500 text-amber-300 shadow-md animate-pulse'
+                : 'bg-stone-900 border-stone-700 text-stone-300 hover:text-stone-100'
             }`}
             title="Activar/Desactivar Música Chiptune Retro 16-bits"
           >
             <Music className="w-4 h-4" />
-            <span className="hidden sm:inline">{bgmActive ? 'MÚSICA: ON' : 'MÚSICA: OFF'}</span>
+            <span className="hidden sm:inline font-bold">{bgmActive ? 'MÚSICA: ON' : 'MÚSICA: OFF'}</span>
           </button>
         </div>
       </div>
 
-      {/* Heroic Title Logo Area */}
-      <div className="relative z-10 my-6 text-center">
+      {/* Heroic Title Logo Area (Clear & Crisp) */}
+      <div className="relative z-10 my-5 text-center">
         <div className="inline-block relative">
-          <div className="absolute -inset-2 bg-gradient-to-r from-red-600 via-amber-500 to-yellow-600 rounded-lg blur-lg opacity-30 animate-pulse" />
-          <div className="relative px-6 py-4 bg-stone-900 border-4 border-amber-500 shadow-2xl rounded-lg">
-            <h1 className="font-pixel text-3xl sm:text-5xl md:text-6xl text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-700 tracking-wider drop-shadow-[0_4px_4px_rgba(0,0,0,0.9)]">
+          <div className="relative px-8 py-5 bg-stone-900 border-4 border-amber-500 shadow-2xl rounded-lg">
+            <h1 className="font-pixel text-4xl sm:text-5xl md:text-6xl text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 via-amber-300 to-amber-600 tracking-wider drop-shadow-md">
               HERO QUEST
             </h1>
-            <div className="font-medieval text-lg sm:text-2xl text-red-400 tracking-widest mt-1 font-bold">
+            <div className="font-medieval text-xl sm:text-2xl text-red-400 tracking-widest mt-1 font-bold">
               ⚔️ CRÓNICAS DE MORCAR ⚔️
             </div>
-            <div className="font-pixel text-[9px] sm:text-[11px] text-stone-400 mt-2">
+            <div className="font-medieval text-sm sm:text-base text-amber-200/90 tracking-wide mt-2 font-semibold">
               EMULADOR TÁCTICO DE MAZMORRAS • DADOS DE COMBATE • MAGIA ELEMENTAL
             </div>
           </div>
@@ -128,15 +126,15 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       {/* Main Configuration Panels */}
       <div className="relative z-10 max-w-5xl mx-auto w-full grid md:grid-cols-12 gap-6 my-2">
         {/* Left Column: Player Count & Party Selection */}
-        <div className="md:col-span-7 bg-stone-900/90 border-2 border-stone-700 rounded-lg p-5 shadow-xl space-y-5">
+        <div className="md:col-span-7 bg-stone-900 border-2 border-stone-700 rounded-lg p-5 shadow-xl space-y-5">
           {/* Step 1: Player count selection */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="font-pixel text-xs text-amber-400 flex items-center gap-2">
+              <span className="font-pixel text-xs text-amber-300 flex items-center gap-2 font-bold">
                 <Users className="w-4 h-4 text-amber-400" />
                 1. NÚMERO DE JUGADORES (1 - 4):
               </span>
-              <span className="text-[10px] text-stone-400 font-pixel">
+              <span className="text-xs text-stone-300 font-pixel">
                 {playerCount === 1 ? '1 Jugador + 3 IA aliadas' : `${playerCount} Jugadores cooperativos`}
               </span>
             </div>
@@ -146,14 +144,14 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                 <button
                   key={count}
                   onClick={() => handlePlayerCountChange(count)}
-                  className={`py-2 rounded font-pixel text-xs transition border flex flex-col items-center gap-1 ${
+                  className={`py-2.5 rounded font-pixel text-xs transition border flex flex-col items-center gap-1 cursor-pointer ${
                     playerCount === count
-                      ? 'bg-amber-600 text-stone-950 border-amber-300 font-bold shadow-lg scale-102'
-                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
+                      ? 'bg-amber-600 text-stone-950 border-amber-300 font-bold shadow-lg scale-102 ring-2 ring-amber-400/50'
+                      : 'bg-stone-950 text-stone-300 border-stone-800 hover:border-stone-600 hover:text-stone-100'
                   }`}
                 >
-                  <span>{count} JUG</span>
-                  <span className="text-[9px] opacity-75">{count === 1 ? 'Solo/IA' : 'Coop'}</span>
+                  <span className="font-bold">{count} JUG</span>
+                  <span className="text-[10px] font-sans font-medium">{count === 1 ? 'Solo/IA' : 'Coop'}</span>
                 </button>
               ))}
             </div>
@@ -162,11 +160,11 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           {/* Step 2: Heroes list & control mode */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="font-pixel text-xs text-amber-400 flex items-center gap-2">
+              <span className="font-pixel text-xs text-amber-300 flex items-center gap-2 font-bold">
                 <Shield className="w-4 h-4 text-amber-400" />
                 2. CUADRILLA DE HÉROES (4 CAMPEONES):
               </span>
-              <span className="text-[10px] text-stone-400 italic font-medieval">
+              <span className="text-xs text-stone-400 italic font-medieval">
                 Haz clic para alternar Humano / IA
               </span>
             </div>
@@ -175,20 +173,20 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               {heroes.map((hero) => (
                 <div
                   key={hero.id}
-                  className="flex items-center justify-between bg-stone-950/80 p-2.5 rounded border border-stone-800 hover:border-amber-800/60 transition"
+                  className="flex items-center justify-between bg-stone-950 p-3 rounded-lg border-2 border-stone-800 hover:border-amber-700 transition"
                 >
                   <div className="flex items-center gap-3">
-                    <HeroPortrait heroClass={hero.heroClass} size={42} />
+                    <HeroPortrait heroClass={hero.heroClass} size={46} />
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-pixel text-xs text-stone-200">{hero.name}</span>
-                        <span className="text-[11px] text-stone-400 font-medieval italic">({hero.title})</span>
+                        <span className="font-pixel text-xs text-amber-300 font-bold">{hero.name}</span>
+                        <span className="text-xs text-stone-300 font-medieval italic">({hero.title})</span>
                       </div>
-                      <div className="flex items-center gap-3 text-[10px] font-pixel text-stone-400 mt-0.5">
-                        <span className="text-red-400">❤️ {hero.bodyPoints} PV</span>
-                        <span className="text-blue-400">🧠 {hero.mindPoints} PM</span>
-                        <span className="text-amber-400">⚔️ {hero.attackDice}D</span>
-                        <span className="text-emerald-400">🛡️ {hero.defendDice}D</span>
+                      <div className="flex items-center gap-3 text-xs font-pixel mt-1 text-stone-300">
+                        <span className="text-red-400 font-bold">❤️ {hero.bodyPoints} PV</span>
+                        <span className="text-blue-400 font-bold">🧠 {hero.mindPoints} PM</span>
+                        <span className="text-amber-300 font-bold">⚔️ {hero.attackDice}D</span>
+                        <span className="text-emerald-400 font-bold">🛡️ {hero.defendDice}D</span>
                       </div>
                     </div>
                   </div>
@@ -196,7 +194,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => onOpenLore(hero.heroClass)}
-                      className="px-2 py-1 bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-amber-300 text-[10px] font-pixel rounded border border-stone-700"
+                      className="px-2.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-amber-300 text-xs font-pixel rounded border border-stone-700 cursor-pointer font-bold transition"
                       title="Ver Historia y Lore"
                     >
                       LORE
@@ -204,19 +202,19 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
 
                     <button
                       onClick={() => handleToggleHeroAI(hero.id)}
-                      className={`px-3 py-1.5 rounded font-pixel text-[10px] flex items-center gap-1.5 border transition ${
+                      className={`px-3 py-1.5 rounded font-pixel text-xs flex items-center gap-1.5 border transition cursor-pointer font-bold ${
                         hero.isAI
-                          ? 'bg-purple-950/80 border-purple-600 text-purple-300'
-                          : 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
+                          ? 'bg-purple-950 border-purple-500 text-purple-200'
+                          : 'bg-emerald-950 border-emerald-500 text-emerald-200'
                       }`}
                     >
                       {hero.isAI ? (
                         <>
-                          <Bot className="w-3.5 h-3.5" /> IA
+                          <Bot className="w-3.5 h-3.5 text-purple-400" /> IA
                         </>
                       ) : (
                         <>
-                          <User className="w-3.5 h-3.5" /> JUGADOR
+                          <User className="w-3.5 h-3.5 text-emerald-400" /> JUGADOR
                         </>
                       )}
                     </button>
@@ -230,8 +228,8 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         {/* Right Column: Quest Selection & Direct Menu Access */}
         <div className="md:col-span-5 flex flex-col justify-between space-y-4">
           {/* Quest Selection Box */}
-          <div className="bg-stone-900/90 border-2 border-stone-700 rounded-lg p-5 shadow-xl space-y-3">
-            <span className="font-pixel text-xs text-amber-400 flex items-center gap-2">
+          <div className="bg-stone-900 border-2 border-stone-700 rounded-lg p-5 shadow-xl space-y-3">
+            <span className="font-pixel text-xs text-amber-300 flex items-center gap-2 font-bold">
               <Scroll className="w-4 h-4 text-amber-400" />
               3. SELECCIÓN DE MISIÓN:
             </span>
@@ -244,26 +242,26 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
                     audio.playStep();
                     onSelectQuest(q);
                   }}
-                  className={`w-full p-3 text-left rounded border transition ${
+                  className={`w-full p-3 text-left rounded-lg border-2 transition cursor-pointer ${
                     selectedQuest.id === q.id
-                      ? 'bg-amber-950/70 border-amber-500 shadow-md'
-                      : 'bg-stone-950 border-stone-800 hover:border-stone-700'
+                      ? 'bg-amber-950/80 border-amber-400 shadow-lg ring-1 ring-amber-400/50'
+                      : 'bg-stone-950 border-stone-800 hover:border-stone-600'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-pixel text-xs text-amber-300">
+                    <span className="font-pixel text-xs text-amber-300 font-bold">
                       MISIÓN {q.number}: {q.title}
                     </span>
-                    <span className="text-[10px] text-amber-400 font-pixel">{q.rewardGold} 🪙</span>
+                    <span className="text-xs text-amber-400 font-pixel font-bold">{q.rewardGold} 🪙</span>
                   </div>
-                  <div className="text-xs text-stone-400 font-medieval italic mt-1">{q.subtitle}</div>
+                  <div className="text-xs text-stone-300 font-medieval italic mt-1">{q.subtitle}</div>
                 </button>
               ))}
             </div>
 
-            <div className="bg-stone-950 p-3 rounded border border-stone-800 text-xs space-y-1">
-              <span className="font-pixel text-[10px] text-stone-400">OBJETIVO PRINCIPAL:</span>
-              <p className="text-stone-300 text-xs italic">{selectedQuest.objective}</p>
+            <div className="bg-stone-950 p-3.5 rounded-lg border border-stone-800 text-xs space-y-1">
+              <span className="font-pixel text-xs text-stone-300 font-bold">OBJETIVO PRINCIPAL:</span>
+              <p className="text-amber-100 text-sm font-medieval italic leading-relaxed">{selectedQuest.objective}</p>
             </div>
           </div>
 
@@ -271,26 +269,26 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={onOpenInstructions}
-              className="p-3 bg-stone-900 hover:bg-stone-800 border-2 border-amber-900 hover:border-amber-600 rounded flex flex-col items-center justify-center text-center gap-1.5 transition text-amber-300"
+              className="p-3 bg-stone-900 hover:bg-stone-800 border-2 border-amber-800 hover:border-amber-500 rounded-lg flex flex-col items-center justify-center text-center gap-1.5 transition text-amber-300 cursor-pointer shadow"
             >
               <BookOpen className="w-5 h-5 text-amber-400" />
-              <span className="font-pixel text-[9px]">REGLAS & GUÍA</span>
+              <span className="font-pixel text-[10px] font-bold">REGLAS</span>
             </button>
 
             <button
               onClick={() => onOpenLore()}
-              className="p-3 bg-stone-900 hover:bg-stone-800 border-2 border-amber-900 hover:border-amber-600 rounded flex flex-col items-center justify-center text-center gap-1.5 transition text-amber-300"
+              className="p-3 bg-stone-900 hover:bg-stone-800 border-2 border-amber-800 hover:border-amber-500 rounded-lg flex flex-col items-center justify-center text-center gap-1.5 transition text-amber-300 cursor-pointer shadow"
             >
               <Scroll className="w-5 h-5 text-amber-400" />
-              <span className="font-pixel text-[9px]">HISTORIA LORE</span>
+              <span className="font-pixel text-[10px] font-bold">HISTORIA</span>
             </button>
 
             <button
               onClick={onOpenSkills}
-              className="p-3 bg-stone-900 hover:bg-stone-800 border-2 border-amber-900 hover:border-amber-600 rounded flex flex-col items-center justify-center text-center gap-1.5 transition text-amber-300"
+              className="p-3 bg-stone-900 hover:bg-stone-800 border-2 border-amber-800 hover:border-amber-500 rounded-lg flex flex-col items-center justify-center text-center gap-1.5 transition text-amber-300 cursor-pointer shadow"
             >
               <Award className="w-5 h-5 text-cyan-400" />
-              <span className="font-pixel text-[9px]">HABILIDADES</span>
+              <span className="font-pixel text-[10px] font-bold">HABILIDADES</span>
             </button>
           </div>
 
@@ -300,7 +298,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               audio.playFanfare();
               onStartGame();
             }}
-            className="w-full py-4 bg-gradient-to-r from-red-700 via-amber-600 to-red-700 hover:from-red-600 hover:via-amber-500 hover:to-red-600 text-stone-950 font-pixel text-base rounded-lg border-4 border-yellow-400 shadow-2xl transition transform hover:scale-102 active:scale-98 flex items-center justify-center gap-3 font-bold cursor-pointer"
+            className="w-full py-4 bg-gradient-to-r from-red-700 via-amber-600 to-red-700 hover:from-red-600 hover:via-amber-500 hover:to-red-600 text-stone-950 font-pixel text-sm sm:text-base rounded-lg border-4 border-yellow-300 shadow-2xl transition transform hover:scale-102 active:scale-98 flex items-center justify-center gap-3 font-bold cursor-pointer"
           >
             <Play className="w-6 h-6 fill-stone-950" />
             ¡DESCENDER A LA MAZMORRA!
@@ -309,7 +307,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       </div>
 
       {/* Bottom Footer Quote */}
-      <div className="relative z-10 text-center text-xs text-stone-500 font-medieval border-t border-stone-800 pt-3">
+      <div className="relative z-10 text-center text-xs text-stone-400 font-medieval border-t border-stone-800 pt-3">
         «El peligro aguarda tras cada puerta de roble, pero la gloria del Imperio es eterna.» — Mentor
       </div>
     </div>
