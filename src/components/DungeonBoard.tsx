@@ -16,6 +16,7 @@ interface DungeonBoardProps {
   onDoorClick: (door: Door) => void;
   onFurnitureClick: (furniture: Furniture) => void;
   isMoving: boolean;
+  allObjectivesComplete?: boolean;
 }
 
 export const DungeonBoard: React.FC<DungeonBoardProps> = ({
@@ -32,6 +33,7 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
   onDoorClick,
   onFurnitureClick,
   isMoving,
+  allObjectivesComplete = false,
 }) => {
   const { mapWidth, mapHeight, rooms, doors, traps, furniture, exitPosition } = quest;
 
@@ -131,7 +133,9 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
               : heroAtTile
               ? `${heroAtTile.name} (${heroAtTile.bodyPoints}/${heroAtTile.maxBodyPoints} PV)`
               : isExit
-              ? 'Escalera de Entrada / Salida'
+              ? allObjectivesComplete
+                ? 'Escalera de Salida (¡ABIERTA! Camina aquí para escapar y ganar la misión)'
+                : 'Escalera de Salida (SELLADA: Debes matar al Jefe y purgar todos los monstruos)'
               : furnAtTile
               ? `${furnAtTile.name} ${furnAtTile.searched ? '(Registrado)' : ''}`
               : `Casilla (${x}, ${y})`
@@ -154,9 +158,23 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
 
           {/* Stairs (Entrance / Exit) */}
           {visible && isExit && (
-            <div className="absolute inset-1 rounded bg-amber-950/80 border-2 border-amber-500 flex flex-col items-center justify-center z-10 shadow-lg">
-              <span className="text-sm sm:text-base leading-none">🪜</span>
-              <span className="text-[7px] font-pixel text-amber-300 font-bold">SALIDA</span>
+            <div
+              className={`absolute inset-0.5 rounded flex flex-col items-center justify-center z-10 shadow-lg border-2 transition ${
+                allObjectivesComplete
+                  ? 'bg-amber-950/90 border-yellow-400 ring-2 ring-yellow-400 animate-pulse text-yellow-200'
+                  : 'bg-stone-900/90 border-stone-600 text-stone-400'
+              }`}
+            >
+              <span className="text-xs sm:text-sm leading-none">
+                {allObjectivesComplete ? '✨🪜' : '🪜🔒'}
+              </span>
+              <span
+                className={`text-[6px] sm:text-[7px] font-pixel font-bold mt-0.5 ${
+                  allObjectivesComplete ? 'text-yellow-300' : 'text-stone-400'
+                }`}
+              >
+                {allObjectivesComplete ? 'SALIDA LIBRE' : 'SELLADA'}
+              </span>
             </div>
           )}
 

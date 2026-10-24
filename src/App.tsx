@@ -68,24 +68,25 @@ export default function App() {
   const activeHero = heroes[activeHeroIndex] || heroes[0];
 
   // Initialize a quest
-  const startQuest = (questToStart: Quest) => {
+  const startQuest = useCallback((questToStart: Quest) => {
     const questCopy: Quest = JSON.parse(JSON.stringify(questToStart));
 
     // Place heroes at start positions
-    const updatedHeroes = heroes.map((h, idx) => {
-      const pos = questCopy.startPositions[idx] || questCopy.startPositions[0];
-      return {
-        ...h,
-        x: pos.x,
-        y: pos.y,
-        isDead: false,
-        bodyPoints: h.maxBodyPoints,
-        mindPoints: h.maxMindPoints,
-        spells: h.spells.map((s) => ({ ...s, isUsed: false })),
-      };
-    });
+    setHeroes((prevHeroes) =>
+      prevHeroes.map((h, idx) => {
+        const pos = questCopy.startPositions[idx] || questCopy.startPositions[0];
+        return {
+          ...h,
+          x: pos.x,
+          y: pos.y,
+          isDead: false,
+          bodyPoints: h.maxBodyPoints,
+          mindPoints: h.maxMindPoints,
+          spells: h.spells.map((s) => ({ ...s, isUsed: false })),
+        };
+      })
+    );
 
-    setHeroes(updatedHeroes);
     setActiveQuest(questCopy);
     setActiveHeroIndex(0);
     setIsMorcarTurn(false);
@@ -98,7 +99,18 @@ export default function App() {
     setOutcomeState({ isOpen: false, isVictory: false });
 
     addLog(`Comienza la misión: "${questCopy.title}". ${questCopy.intro}`, 'info');
-  };
+  }, [addLog]);
+
+  // Generate a brand new, completely randomized dungeon on demand
+  const startRandomQuest = useCallback(() => {
+    const freshQuest = generateProceduralQuest({ floorLevel: currentFloor, dungeonSize: 'epic' });
+    setSelectedQuest(freshQuest);
+    startQuest(freshQuest);
+    addLog(
+      `🎲 ¡Se ha generado una nueva mazmorra 100% aleatoria con ${freshQuest.rooms.length} salas y ${freshQuest.monsters.length} criaturas del Caos!`,
+      'loot'
+    );
+  }, [currentFloor, startQuest, addLog]);
 
   // Find room for coordinates
   const getRoomAt = useCallback(
@@ -242,6 +254,36 @@ export default function App() {
     (activeHero.heroClass === 'elf' || activeHero.heroClass === 'wizard') &&
     activeHero.spells.some((s) => !s.isUsed);
 
+  // Two mandatory quest objectives
+  const livingBoss = React.useMemo(
+    () => activeQuest.monsters.find((m) => m.isBoss && !m.isDead),
+    [activeQuest.monsters]
+  );
+  const bossName = React.useMemo(() => {
+    const boss = activeQuest.monsters.find((m) => m.isBoss);
+    return boss ? boss.name : 'Jefe Supremo';
+  }, [activeQuest.monsters]);
+
+  const isBossDefeated = !livingBoss;
+  const livingMonstersCount = React.useMemo(
+    () => activeQuest.monsters.filter((m) => !m.isDead).length,
+    [activeQuest.monsters]
+  );
+  const isDungeonCleared = livingMonstersCount === 0;
+  const areAllObjectivesComplete = isBossDefeated && isDungeonCleared;
+
+  // Active skill node if unlocked for active hero
+  const unlockedActiveSkill = React.useMemo(() => {
+    const activeSkillNode = activeHero.skills.find((s) => s.unlocked && s.activeEffect);
+    if (!activeSkillNode) return null;
+    return {
+      name: activeSkillNode.name,
+      icon: activeSkillNode.icon,
+      description: activeSkillNode.description,
+      effect: activeSkillNode.activeEffect!,
+    };
+  }, [activeHero.skills]);
+
   // ACTION: Roll Movement Dice (2d6)
   const handleRollMovement = () => {
     if (hasRolledMovement || activeHero.isDead) return;
@@ -292,11 +334,42 @@ export default function App() {
       if (updatedHero.isDead) {
         addLog(`💀 ¡${updatedHero.name} ha muerto en las profundidades de la mazmorra!`, 'danger');
       } else if (x === activeQuest.exitPosition.x && y === activeQuest.exitPosition.y) {
-        const anyLivingBoss = activeQuest.monsters.some((m) => m.isBoss && !m.isDead && m.revealed);
-        if (!anyLivingBoss) {
+        const currentLivingBoss = activeQuest.monsters.find((m) => m.isBoss && !m.isDead);
+        const currentRemainingMonsters = activeQuest.monsters.filter((m) => !m.isDead);
+
+        if (!currentLivingBoss && currentRemainingMonsters.length === 0) {
           audio.playFanfare();
-          addLog(`🪜 ¡${updatedHero.name} alcanza la escalera de salida/descenso! ¡Objetivo cumplido!`, 'loot');
+          addLog(`🏆 ¡VICTORIA TOTAL! ¡${updatedHero.name} y los héroes escapan triunfantes por las escaleras habiendo aniquilado al Jefe y purgado todos los monstruos de la mazmorra!`, 'loot');
+          setHeroes((prev) =>
+            prev.map((h) =>
+              h.isDead
+                ? h
+                : {
+                    ...h,
+                    gold: h.gold + activeQuest.rewardGold,
+                    skillPoints: h.skillPoints + activeQuest.rewardSkillPoints,
+                  }
+            )
+          );
           setOutcomeState({ isOpen: true, isVictory: true });
+        } else {
+          audio.playBlock();
+          if (currentLivingBoss && currentRemainingMonsters.length > 1) {
+            addLog(
+              `⚠️ Las escaleras de salida están selladas por la magia de Morcar. Objetivos obligatorios: 1) Derrotar al Jefe (${currentLivingBoss.name}) [Pendiente], 2) Limpiar la mazmorra (${currentRemainingMonsters.length} monstruos restantes).`,
+              'danger'
+            );
+          } else if (currentLivingBoss) {
+            addLog(
+              `⚠️ Las escaleras de salida están bloqueadas. ¡Debes encontrar y destruir al Jefe (${currentLivingBoss.name}) antes de poder escapar!`,
+              'danger'
+            );
+          } else {
+            addLog(
+              `⚠️ Las escaleras están selladas. Has derrotado al Jefe, pero aún quedan ${currentRemainingMonsters.length} monstruo(s) acechando en la mazmorra. ¡Debéis purgar el escenario por completo!`,
+              'danger'
+            );
+          }
         }
       }
     },
@@ -433,6 +506,104 @@ export default function App() {
     }
   };
 
+  // ACTION: Trigger Unlocked Active Special Skill
+  const handleUseActiveSkill = () => {
+    if (hasActed || activeHero.isDead || !unlockedActiveSkill) return;
+
+    if (unlockedActiveSkill.effect === 'whirlwind_attack') {
+      // Barbarian: strikes all adjacent monsters
+      const adjacentMonsters = activeQuest.monsters.filter((m) => {
+        if (m.isDead || !m.revealed) return false;
+        const dx = Math.abs(m.x - activeHero.x);
+        const dy = Math.abs(m.y - activeHero.y);
+        return Math.max(dx, dy) === 1;
+      });
+
+      if (adjacentMonsters.length === 0) {
+        audio.playBlock();
+        addLog(`⚠️ Torbellino requiere al menos un monstruo adyacente para ser ejecutado.`, 'combat');
+        return;
+      }
+
+      audio.playFanfare();
+      setHasActed(true);
+      addLog(`🌪️ ¡${activeHero.name} desata el Golpe Circular Torbellino barriendo con su acero!`, 'combat');
+
+      const updatedMonsters = activeQuest.monsters.map((m) => {
+        if (adjacentMonsters.some((adj) => adj.id === m.id)) {
+          const newHp = Math.max(0, m.bodyPoints - 2);
+          return { ...m, bodyPoints: newHp, isDead: newHp <= 0 };
+        }
+        return m;
+      });
+      setActiveQuest((prev) => ({ ...prev, monsters: updatedMonsters }));
+      addLog(`⚔️ ¡El Torbellino hiere a ${adjacentMonsters.length} enemigos infligiendo 2 de daño a cada uno!`, 'combat');
+    } else if (unlockedActiveSkill.effect === 'shatter_blow') {
+      // Dwarf: Impacto demoledor
+      const adjacentMonsters = activeQuest.monsters.filter((m) => {
+        if (m.isDead || !m.revealed) return false;
+        const dx = Math.abs(m.x - activeHero.x);
+        const dy = Math.abs(m.y - activeHero.y);
+        return Math.max(dx, dy) === 1;
+      });
+
+      if (adjacentMonsters.length === 0) {
+        audio.playBlock();
+        addLog(`⚠️ Impacto Demoledor requiere un enemigo adyacente.`, 'combat');
+        return;
+      }
+
+      const target = adjacentMonsters[0];
+      audio.playFanfare();
+      setHasActed(true);
+      const newHp = Math.max(0, target.bodyPoints - 3);
+      const updatedMonsters = activeQuest.monsters.map((m) =>
+        m.id === target.id ? { ...m, bodyPoints: newHp, isDead: newHp <= 0 } : m
+      );
+      setActiveQuest((prev) => ({ ...prev, monsters: updatedMonsters }));
+      addLog(`🔨 ¡${activeHero.name} aplasta a ${target.name} con un Impacto Demoledor sin posibilidad de defensa! (-3 PV)`, 'combat');
+    } else if (unlockedActiveSkill.effect === 'recharge_spell') {
+      // Elf: Armonía Silvana
+      const spentSpell = activeHero.spells.find((s) => s.isUsed);
+      if (!spentSpell) {
+        audio.playBlock();
+        addLog(`⚠️ Todos tus hechizos elementales están listos para ser invocados.`, 'info');
+        return;
+      }
+      audio.playSpell();
+      setHasActed(true);
+      const updatedSpells = activeHero.spells.map((s) => (s.id === spentSpell.id ? { ...s, isUsed: false } : s));
+      const updatedHero = { ...activeHero, spells: updatedSpells };
+      setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
+      addLog(`🍃 ¡${activeHero.name} canaliza la Armonía Silvana y recarga el hechizo: ${spentSpell.name}!`, 'spell');
+    } else if (unlockedActiveSkill.effect === 'arcane_nova') {
+      // Wizard: Nova Cósmica
+      const currentRoom = getRoomAt(activeHero.x, activeHero.y);
+      if (!currentRoom) {
+        audio.playBlock();
+        addLog(`⚠️ Nova Cósmica debe ser canalizada en el interior de una sala de la mazmorra.`, 'info');
+        return;
+      }
+      const roomMonsters = activeQuest.monsters.filter((m) => m.roomId === currentRoom.id && !m.isDead);
+      if (roomMonsters.length === 0) {
+        audio.playBlock();
+        addLog(`⚠️ No hay criaturas del Caos en esta sala para purificar.`, 'info');
+        return;
+      }
+      audio.playSpell();
+      setHasActed(true);
+      const updatedMonsters = activeQuest.monsters.map((m) => {
+        if (m.roomId === currentRoom.id && !m.isDead) {
+          const newHp = Math.max(0, m.bodyPoints - 2);
+          return { ...m, bodyPoints: newHp, isDead: newHp <= 0 };
+        }
+        return m;
+      });
+      setActiveQuest((prev) => ({ ...prev, monsters: updatedMonsters }));
+      addLog(`💥 ¡${activeHero.name} desata la Nova Cósmica de Loretome dañando a todas las criaturas de la sala!`, 'spell');
+    }
+  };
+
   // ACTION: Attack Monster
   const handleMonsterClick = (monster: Monster) => {
     if (hasActed || activeHero.isDead) return;
@@ -494,17 +665,33 @@ export default function App() {
           };
           setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
 
+          const otherMonstersRemaining = updatedMonsters.filter((m) => !m.isDead).length;
+          const isBossAlive = updatedMonsters.some((m) => m.isBoss && !m.isDead);
+
           if (isBoss) {
-            addLog(
-              `🏆 ¡EL JEFE SUPREMO ${monster.name.toUpperCase()} HA SIDO ANIQUILADO! ¡Mentor proclama vuestra victoria!`,
-              'loot'
-            );
-            setOutcomeState({ isOpen: true, isVictory: true });
+            if (otherMonstersRemaining === 0) {
+              addLog(
+                `🏆 ¡EL JEFE SUPREMO ${monster.name.toUpperCase()} HA SIDO ANIQUILADO Y LA MAZMORRA ESTÁ PURGADA! Gana +${monster.bountyGold}🪙 y +${monster.bountyExp}💎 PH. ¡Dirigíos a las escaleras de salida para escapar con la victoria!`,
+                'loot'
+              );
+            } else {
+              addLog(
+                `⚡ ¡EL JEFE SUPREMO ${monster.name.toUpperCase()} HA CAÍDO! Gana +${monster.bountyGold}🪙 y +${monster.bountyExp}💎 PH. Aún quedan ${otherMonstersRemaining} monstruos acechando. ¡Debéis eliminarlos a todos para desbloquear la salida!`,
+                'combat'
+              );
+            }
           } else {
-            addLog(
-              `⚔️ ¡${attackerName} destruye a ${monster.name}! Gana +${monster.bountyGold}🪙 y +${monster.bountyExp}💎 PH.`,
-              'combat'
-            );
+            if (!isBossAlive && otherMonstersRemaining === 0) {
+              addLog(
+                `🎉 ¡Todos los monstruos han sido erradicados y el Jefe derrotado! Gana +${monster.bountyGold}🪙 y +${monster.bountyExp}💎 PH. ¡La mazmorra está despejada! ¡Id a las escaleras de salida!`,
+                'loot'
+              );
+            } else {
+              addLog(
+                `⚔️ ¡${attackerName} destruye a ${monster.name}! Gana +${monster.bountyGold}🪙 y +${monster.bountyExp}💎 PH. (${otherMonstersRemaining} monstruos restantes)`,
+                'combat'
+              );
+            }
           }
         } else {
           addLog(
@@ -895,7 +1082,20 @@ export default function App() {
 
   // Restart quest on victory/defeat
   const handleNextOrRetry = () => {
-    startQuest(selectedQuest);
+    if (selectedQuest.id.startsWith('procedural')) {
+      startRandomQuest();
+    } else {
+      startQuest(selectedQuest);
+    }
+  };
+
+  const handleDescendNextFloor = () => {
+    const nextFloor = currentFloor + 1;
+    setCurrentFloor(nextFloor);
+    const newFloorQuest = generateProceduralQuest({ floorLevel: nextFloor, dungeonSize: 'epic' });
+    setSelectedQuest(newFloorQuest);
+    startQuest(newFloorQuest);
+    addLog(`🏰 ¡La escuadra desciende al Piso ${nextFloor} de las catacumbas! Nuevos peligros y riquezas os aguardan.`, 'loot');
   };
 
   return (
@@ -908,6 +1108,8 @@ export default function App() {
           onSelectQuest={(q) => setSelectedQuest(q)}
           onUpdateHeroConfig={(updated) => setHeroes(updated)}
           onStartGame={() => startQuest(selectedQuest)}
+          onStartRandomGame={startRandomQuest}
+          onGenerateRandomQuest={() => startRandomQuest()}
           onOpenInstructions={() => setShowInstructions(true)}
           onOpenLore={(heroClass) => {
             if (heroClass) setInitialLoreHero(heroClass);
@@ -936,6 +1138,13 @@ export default function App() {
             adjacentDoors={adjacentDoors}
             adjacentFurniture={adjacentFurniture}
             logs={logs}
+            isBossDefeated={isBossDefeated}
+            bossName={bossName}
+            livingMonstersCount={livingMonstersCount}
+            isDungeonCleared={isDungeonCleared}
+            areAllObjectivesComplete={areAllObjectivesComplete}
+            unlockedActiveSkill={unlockedActiveSkill}
+            onUseActiveSkill={handleUseActiveSkill}
             onRollMovement={handleRollMovement}
             onInitiateAttack={() => {
               const firstTarget = activeQuest.monsters.find((m) => targetableMonsters.includes(m.id));
@@ -954,6 +1163,7 @@ export default function App() {
             onOpenInstructions={() => setShowInstructions(true)}
             onOpenLore={() => setShowLore(true)}
             onReturnToTitle={() => setGamePhase('title')}
+            onGenerateRandomDungeon={startRandomQuest}
           />
 
           {/* Authentic 16-Bit Grid Board */}
@@ -971,6 +1181,7 @@ export default function App() {
             onDoorClick={handleOpenDoor}
             onFurnitureClick={handleFurnitureClick}
             isMoving={movementRemaining > 0}
+            allObjectivesComplete={areAllObjectivesComplete}
           />
         </div>
       )}
@@ -1038,6 +1249,7 @@ export default function App() {
         quest={activeQuest}
         onNextOrRetry={handleNextOrRetry}
         onOpenSkills={() => setShowSkills(true)}
+        onDescendNextFloor={handleDescendNextFloor}
       />
     </div>
   );

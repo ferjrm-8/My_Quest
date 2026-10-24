@@ -11,6 +11,7 @@ interface TitleScreenProps {
   onSelectQuest: (quest: Quest) => void;
   onUpdateHeroConfig: (heroes: Hero[]) => void;
   onStartGame: () => void;
+  onStartRandomGame?: () => void;
   onOpenInstructions: () => void;
   onOpenLore: (initialHero?: HeroClass) => void;
   onOpenSkills: () => void;
@@ -24,6 +25,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onSelectQuest,
   onUpdateHeroConfig,
   onStartGame,
+  onStartRandomGame,
   onOpenInstructions,
   onOpenLore,
   onOpenSkills,
@@ -32,6 +34,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const [playerCount, setPlayerCount] = useState<number>(1);
   const [bgmActive, setBgmActive] = useState<boolean>(audio.getBgmState());
   const [soundMuted, setSoundMuted] = useState<boolean>(audio.isMuted());
+  const [isRandomMode, setIsRandomMode] = useState<boolean>(true);
 
   const handlePlayerCountChange = (count: number) => {
     audio.playLoot();
@@ -234,64 +237,80 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             <div className="flex items-center justify-between">
               <span className="font-pixel text-xs text-amber-300 flex items-center gap-2 font-bold">
                 <Scroll className="w-4 h-4 text-amber-400" />
-                3. SELECCIÓN DE MISIÓN:
+                3. MODO DE JUEGO & MISIÓN:
               </span>
             </div>
 
-            {/* Quick Generator Buttons */}
-            {onGenerateRandomQuest && (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => {
-                    audio.playSpell();
-                    onGenerateRandomQuest('standard');
-                  }}
-                  className="p-2 bg-gradient-to-r from-purple-950 to-indigo-950 hover:from-purple-900 hover:to-indigo-900 text-purple-200 rounded border border-purple-500 font-pixel text-[10px] flex items-center justify-center gap-1 font-bold cursor-pointer transition shadow"
-                  title="Generar una nueva mazmorra 100% aleatoria"
-                >
-                  <span>🎲 NUEVA ALEATORIA</span>
-                </button>
-                <button
-                  onClick={() => {
-                    audio.playFanfare();
-                    onGenerateRandomQuest('epic');
-                  }}
-                  className="p-2 bg-gradient-to-r from-red-950 to-amber-950 hover:from-red-900 hover:to-amber-900 text-amber-200 rounded border border-amber-500 font-pixel text-[10px] flex items-center justify-center gap-1 font-bold cursor-pointer transition shadow"
-                  title="Generar una incursión extendida con 10+ salas y más jefes"
-                >
-                  <span>🏰 PARTIDA LARGA ÉPICA</span>
-                </button>
+            {/* PRIMARY MODE: Procedural Random Dungeon */}
+            <button
+              onClick={() => {
+                audio.playSpell();
+                setIsRandomMode(true);
+              }}
+              className={`w-full p-3.5 text-left rounded-lg border-2 transition cursor-pointer relative overflow-hidden ${
+                isRandomMode
+                  ? 'bg-gradient-to-r from-purple-950 via-indigo-950 to-purple-950 border-yellow-400 ring-2 ring-yellow-400/50 shadow-2xl'
+                  : 'bg-stone-950 border-purple-900/60 hover:border-purple-600'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-pixel text-xs text-yellow-300 font-bold flex items-center gap-1.5">
+                  <span>🎲</span> MAZMORRA ALEATORIA (~30 MIN)
+                </span>
+                <span className="text-[9px] font-pixel bg-yellow-500 text-stone-950 px-1.5 py-0.5 rounded font-bold">
+                  100% DINÁMICA
+                </span>
               </div>
-            )}
+              <div className="text-xs text-purple-200 font-medieval italic mt-1 leading-snug">
+                100% Nueva en cada partida • 14+ Salas • 25+ Monstruos • Jefe Supremo Aleatorio
+              </div>
+              <div className="text-[10px] text-yellow-400/90 font-pixel mt-1.5 flex items-center gap-2">
+                <span>⚔️ Doble Objetivo: Derrotar al Jefe y purgar todos los monstruos</span>
+              </div>
+            </button>
 
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {quests.map((q) => (
-                <button
-                  key={q.id}
-                  onClick={() => {
-                    audio.playStep();
-                    onSelectQuest(q);
-                  }}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition cursor-pointer ${
-                    selectedQuest.id === q.id
-                      ? 'bg-amber-950/80 border-amber-400 shadow-lg ring-1 ring-amber-400/50'
-                      : 'bg-stone-950 border-stone-800 hover:border-stone-600'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-pixel text-xs text-amber-300 font-bold">
-                      MISIÓN {q.number}: {q.title}
-                    </span>
-                    <span className="text-xs text-amber-400 font-pixel font-bold">{q.rewardGold} 🪙</span>
-                  </div>
-                  <div className="text-xs text-stone-300 font-medieval italic mt-1">{q.subtitle}</div>
-                </button>
-              ))}
+            {/* CLASSIC STORY QUESTS */}
+            <div className="text-[10px] font-pixel text-stone-400 uppercase tracking-wider pt-1">
+              O Elige una Misión Clásica Predefinida:
             </div>
 
-            <div className="bg-stone-950 p-3.5 rounded-lg border border-stone-800 text-xs space-y-1">
-              <span className="font-pixel text-xs text-stone-300 font-bold">OBJETIVO PRINCIPAL:</span>
-              <p className="text-amber-100 text-sm font-medieval italic leading-relaxed">{selectedQuest.objective}</p>
+            <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+              {quests.map((q) => {
+                const isSelected = !isRandomMode && selectedQuest.id === q.id;
+                return (
+                  <button
+                    key={q.id}
+                    onClick={() => {
+                      audio.playStep();
+                      setIsRandomMode(false);
+                      onSelectQuest(q);
+                    }}
+                    className={`w-full p-2.5 text-left rounded-lg border-2 transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-950/80 border-amber-400 shadow-lg ring-1 ring-amber-400/50'
+                        : 'bg-stone-950 border-stone-800 hover:border-stone-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-pixel text-xs text-amber-300 font-bold">
+                        MISIÓN {q.number}: {q.title}
+                      </span>
+                      <span className="text-xs text-amber-400 font-pixel font-bold">{q.rewardGold} 🪙</span>
+                    </div>
+                    <div className="text-xs text-stone-300 font-medieval italic mt-0.5">{q.subtitle}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Objective Preview */}
+            <div className="bg-stone-950 p-3 rounded-lg border border-stone-800 text-xs space-y-1">
+              <span className="font-pixel text-[11px] text-stone-400 font-bold">CONDICIONES DE VICTORIA:</span>
+              <p className="text-amber-100 text-xs font-medieval italic leading-relaxed">
+                {isRandomMode
+                  ? '1) Aniquilar al Jefe Supremo. 2) Purgar el 100% de los monstruos del mapa. 3) Escapar con vida por las escaleras de salida.'
+                  : selectedQuest.objective}
+              </p>
             </div>
           </div>
 
@@ -326,12 +345,16 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           <button
             onClick={() => {
               audio.playFanfare();
-              onStartGame();
+              if (isRandomMode && onStartRandomGame) {
+                onStartRandomGame();
+              } else {
+                onStartGame();
+              }
             }}
             className="w-full py-4 bg-gradient-to-r from-red-700 via-amber-600 to-red-700 hover:from-red-600 hover:via-amber-500 hover:to-red-600 text-stone-950 font-pixel text-sm sm:text-base rounded-lg border-4 border-yellow-300 shadow-2xl transition transform hover:scale-102 active:scale-98 flex items-center justify-center gap-3 font-bold cursor-pointer"
           >
             <Play className="w-6 h-6 fill-stone-950" />
-            ¡DESCENDER A LA MAZMORRA!
+            {isRandomMode ? '¡GENERAR Y DESCENDER A LA MAZMORRA!' : '¡DESCENDER A LA MAZMORRA!'}
           </button>
         </div>
       </div>

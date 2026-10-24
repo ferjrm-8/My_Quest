@@ -45,6 +45,13 @@ interface HUDProps {
   adjacentDoors: Door[];
   adjacentFurniture: Furniture[];
   logs: GameLog[];
+  isBossDefeated: boolean;
+  bossName: string;
+  livingMonstersCount: number;
+  isDungeonCleared: boolean;
+  areAllObjectivesComplete: boolean;
+  unlockedActiveSkill?: { name: string; icon: string; description: string; effect: string } | null;
+  onUseActiveSkill?: () => void;
   onRollMovement: () => void;
   onInitiateAttack: () => void;
   onOpenSpellCast: () => void;
@@ -80,6 +87,13 @@ export const HUD: React.FC<HUDProps> = ({
   adjacentDoors,
   adjacentFurniture,
   logs,
+  isBossDefeated,
+  bossName,
+  livingMonstersCount,
+  isDungeonCleared,
+  areAllObjectivesComplete,
+  unlockedActiveSkill,
+  onUseActiveSkill,
   onRollMovement,
   onInitiateAttack,
   onOpenSpellCast,
@@ -116,92 +130,142 @@ export const HUD: React.FC<HUDProps> = ({
   return (
     <div className="w-full flex flex-col space-y-3">
       {/* Top Bar: Quest title, round & global navigation */}
-      <div className="bg-stone-900 border-2 border-stone-700 rounded-lg p-3 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onReturnToTitle}
-            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-400 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-800 cursor-pointer"
-          >
-            ← MENÚ
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-pixel text-xs text-amber-300">
-                MISIÓN {quest.number}: {quest.title}
-              </span>
-              <span className="text-[10px] font-pixel bg-amber-950 text-amber-300 px-2 py-0.5 rounded border border-amber-800">
-                RONDA {roundNumber}
-              </span>
+      <div className="bg-stone-900 border-2 border-stone-700 rounded-lg p-3 flex flex-col space-y-2.5 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onReturnToTitle}
+              className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-400 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-800 cursor-pointer"
+            >
+              ← MENÚ
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-pixel text-xs text-amber-300 font-bold">
+                  MISIÓN {quest.number}: {quest.title}
+                </span>
+                <span className="text-[10px] font-pixel bg-amber-950 text-amber-300 px-2 py-0.5 rounded border border-amber-800">
+                  RONDA {roundNumber}
+                </span>
+              </div>
+              <div className="text-xs text-stone-300 font-medieval italic mt-0.5">{quest.subtitle || quest.objective}</div>
             </div>
-            <div className="text-xs text-stone-400 font-medieval italic">{quest.objective}</div>
+          </div>
+
+          {/* Global Toolbar buttons */}
+          <div className="flex items-center gap-2">
+            {/* Random dungeon generator button */}
+            {onGenerateRandomDungeon && (
+              <button
+                onClick={onGenerateRandomDungeon}
+                className="px-2.5 py-1.5 bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 text-purple-200 hover:text-white font-pixel text-[10px] rounded border border-purple-500 shadow flex items-center gap-1 font-bold transition cursor-pointer"
+                title="Generar inmediatamente una nueva mazmorra procedural aleatoria"
+              >
+                <span>🎲 NUEVA MAZMORRA</span>
+              </button>
+            )}
+
+            {/* Always Present Skills Button */}
+            <button
+              onClick={onOpenSkills}
+              className="px-3 py-1.5 bg-gradient-to-r from-amber-700 to-yellow-600 hover:from-amber-600 hover:to-yellow-500 text-stone-950 font-pixel text-xs rounded border border-yellow-300 shadow flex items-center gap-1.5 font-bold transition cursor-pointer"
+              title="Árbol de Habilidades, Armería y Equipamiento"
+            >
+              <Award className="w-4 h-4" />
+              <span>HABILIDADES & TIENDA</span>
+              {heroes.some((h) => h.skillPoints > 0) && (
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+              )}
+            </button>
+
+            <button
+              onClick={onOpenInstructions}
+              className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1 cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">REGLAS</span>
+            </button>
+
+            <button
+              onClick={onOpenLore}
+              className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1 cursor-pointer"
+            >
+              <Scroll className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">HISTORIA</span>
+            </button>
+
+            <button
+              onClick={handleToggleSound}
+              className={`p-1.5 rounded border font-pixel text-[10px] cursor-pointer ${
+                soundMuted ? 'bg-red-950 border-red-700 text-red-400' : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
+              }`}
+              title="Efectos de sonido"
+            >
+              {soundMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+            </button>
+
+            <button
+              onClick={handleToggleBgm}
+              className={`p-1.5 rounded border font-pixel text-[10px] cursor-pointer ${
+                bgmActive ? 'bg-amber-950 border-amber-600 text-amber-300 animate-pulse' : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
+              }`}
+              title="Música Chiptune 16-bits"
+            >
+              <Music className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
-        {/* Global Toolbar buttons */}
-        <div className="flex items-center gap-2">
-          {/* Random dungeon generator button */}
-          {onGenerateRandomDungeon && (
-            <button
-              onClick={onGenerateRandomDungeon}
-              className="px-2.5 py-1.5 bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 text-purple-200 hover:text-white font-pixel text-[10px] rounded border border-purple-500 shadow flex items-center gap-1 font-bold transition cursor-pointer"
-              title="Generar un nuevo mapa aleatorio con salas y monstruos procedurables"
-            >
-              <span>🎲 NUEVA MAZMORRA</span>
-            </button>
-          )}
+        {/* TWO MANDATORY OBJECTIVES TRACKER BAR */}
+        <div className="bg-stone-950/90 border border-amber-800/60 rounded px-3 py-2 flex flex-wrap items-center justify-between gap-3 text-xs font-pixel">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="text-amber-400 font-bold flex items-center gap-1">
+              🎯 OBJETIVOS:
+            </span>
 
-          {/* Always Present Skills Button */}
-          <button
-            onClick={onOpenSkills}
-            className="px-3 py-1.5 bg-gradient-to-r from-amber-700 to-yellow-600 hover:from-amber-600 hover:to-yellow-500 text-stone-950 font-pixel text-xs rounded border border-yellow-300 shadow flex items-center gap-1.5 font-bold transition cursor-pointer"
-            title="Árbol de Habilidades, Armería y Equipamiento"
-          >
-            <Award className="w-4 h-4" />
-            <span>HABILIDADES & TIENDA</span>
-          </button>
+            {/* Objective 1: Slay the Boss */}
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border ${
+              isBossDefeated
+                ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
+                : 'bg-red-950/60 border-red-700 text-red-300 animate-pulse'
+            }`}>
+              <span>{isBossDefeated ? '✅' : '👑'}</span>
+              <span>
+                1. Jefe ({bossName}): {isBossDefeated ? 'DERROTADO' : 'CON VIDA'}
+              </span>
+            </div>
 
-          <button
-            onClick={onOpenInstructions}
-            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1 cursor-pointer"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">REGLAS</span>
-          </button>
+            {/* Objective 2: Purge All Monsters */}
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border ${
+              isDungeonCleared
+                ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
+                : 'bg-stone-900 border-amber-700 text-amber-200'
+            }`}>
+              <span>{isDungeonCleared ? '✅' : '💀'}</span>
+              <span>
+                2. Limpiar mazmorra: {isDungeonCleared ? 'DESPEJADA (0 enemigos)' : `${livingMonstersCount} monstruo(s) restantes`}
+              </span>
+            </div>
+          </div>
 
-          <button
-            onClick={onOpenLore}
-            className="px-2.5 py-1.5 bg-stone-950 hover:bg-stone-800 text-stone-300 hover:text-amber-300 font-pixel text-[10px] rounded border border-stone-700 flex items-center gap-1 cursor-pointer"
-          >
-            <Scroll className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">HISTORIA</span>
-          </button>
-
-          <button
-            onClick={handleToggleSound}
-            className={`p-1.5 rounded border font-pixel text-[10px] cursor-pointer ${
-              soundMuted ? 'bg-red-950 border-red-700 text-red-400' : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
-            }`}
-            title="Efectos de sonido"
-          >
-            {soundMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-          </button>
-
-          <button
-            onClick={handleToggleBgm}
-            className={`p-1.5 rounded border font-pixel text-[10px] cursor-pointer ${
-              bgmActive ? 'bg-amber-950 border-amber-600 text-amber-300 animate-pulse' : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
-            }`}
-            title="Música Chiptune 16-bits"
-          >
-            <Music className="w-3.5 h-3.5" />
-          </button>
+          {/* Exit Status */}
+          <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded border font-bold ${
+            areAllObjectivesComplete
+              ? 'bg-gradient-to-r from-amber-600 to-yellow-500 text-stone-950 border-yellow-300 animate-pulse'
+              : 'bg-stone-950 text-stone-400 border-stone-800'
+          }`}>
+            <span>{areAllObjectivesComplete ? '✨🪜' : '🔒🪜'}</span>
+            <span>
+              {areAllObjectivesComplete ? '¡ESCALERA DE SALIDA DESBLOQUEADA!' : 'Escalera de Salida: SELLADA'}
+            </span>
+          </div>
         </div>
       </div>
-
       {/* Hero Party Cards Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {heroes.map((hero, idx) => {
           const isActive = !isMorcarTurn && idx === activeHeroIndex;
+          const hasUnspentPoints = hero.skillPoints > 0;
           return (
             <div
               key={hero.id}
@@ -217,7 +281,7 @@ export const HUD: React.FC<HUDProps> = ({
                 <HeroPortrait heroClass={hero.heroClass} size={36} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="font-pixel text-[11px] text-stone-200 truncate">{hero.name}</span>
+                    <span className="font-pixel text-[11px] text-stone-200 truncate font-bold">{hero.name}</span>
                     {isActive && (
                       <span className="text-[9px] font-pixel bg-amber-500 text-stone-950 px-1 rounded animate-pulse font-bold">
                         TURNO
@@ -244,12 +308,25 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-1 pt-1 border-t border-stone-800 text-[9px] font-pixel text-stone-400">
-                <span className="text-amber-400">{hero.gold} 🪙</span>
-                <span className="text-cyan-400">{hero.skillPoints} 💎 PH</span>
-                <span className="text-stone-300">
-                  ⚔️{hero.attackDice} 🛡️{hero.defendDice}
-                </span>
+              {/* Gold, PH, Dice, and Upgrade Button */}
+              <div className="flex flex-col gap-1 mt-1 pt-1 border-t border-stone-800 text-[9px] font-pixel">
+                <div className="flex items-center justify-between text-stone-400">
+                  <span className="text-amber-400 font-bold">{hero.gold} 🪙</span>
+                  <span className="text-cyan-400 font-bold" title="Puntos de Habilidad para aprender nuevas técnicas">{hero.skillPoints} 💎 PH</span>
+                  <span className="text-stone-300">
+                    ⚔️{hero.attackDice} 🛡️{hero.defendDice}
+                  </span>
+                </div>
+
+                {hasUnspentPoints && (
+                  <button
+                    onClick={onOpenSkills}
+                    className="w-full mt-0.5 py-1 px-1 bg-gradient-to-r from-cyan-900 to-amber-900 hover:from-cyan-800 hover:to-amber-800 text-yellow-200 border border-yellow-400/80 rounded font-pixel text-[8px] flex items-center justify-center gap-1 shadow cursor-pointer transition animate-pulse font-bold"
+                    title={`¡${hero.name} tiene ${hero.skillPoints} Puntos de Habilidad para gastar en mejoras!`}
+                  >
+                    <span>✨ MEJORAR ({hero.skillPoints} PH)</span>
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -407,6 +484,23 @@ export const HUD: React.FC<HUDProps> = ({
                 <Sparkles className="w-4 h-4" />
                 <span>HECHIZO</span>
               </button>
+
+              {/* Active Special Skill (when unlocked) */}
+              {unlockedActiveSkill && onUseActiveSkill && (
+                <button
+                  onClick={onUseActiveSkill}
+                  disabled={hasActed || activeHero.isDead}
+                  title={`Habilidad Especial: ${unlockedActiveSkill.name} - ${unlockedActiveSkill.description}`}
+                  className={`py-2 px-2 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 border transition ${
+                    hasActed || activeHero.isDead
+                      ? 'bg-stone-950 text-stone-600 border-stone-800 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-purple-900 to-amber-900 hover:from-purple-800 hover:to-amber-800 text-yellow-200 border-2 border-yellow-400 shadow-lg cursor-pointer animate-pulse ring-2 ring-purple-500/50'
+                  }`}
+                >
+                  <span className="text-base leading-none">{unlockedActiveSkill.icon}</span>
+                  <span className="truncate max-w-[80px] font-bold">{unlockedActiveSkill.name}</span>
+                </button>
+              )}
 
               {/* 4. Search Treasure */}
               <button

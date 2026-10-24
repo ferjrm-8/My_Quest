@@ -278,8 +278,28 @@ export const SkillsUpgradeModal: React.FC<SkillsUpgradeModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6">
           {viewTab === 'skills' && (
             <div className="space-y-4">
-              <div className="text-xs text-stone-400 font-medieval mb-3 bg-stone-950/40 p-3 rounded border border-stone-800">
-                Cada habilidad otorga bonificaciones activas o pasivas permanentes. Desbloquearlas requiere Monedas de Oro ganadas en las mazmorras y Puntos de Habilidad otorgados por victorias de combate y objetivos.
+              <div className="bg-gradient-to-r from-stone-950 via-amber-950/40 to-stone-950 p-4 rounded-lg border border-amber-600/50 space-y-1.5 mb-4 shadow">
+                <div className="font-pixel text-xs text-amber-300 flex items-center gap-2 font-bold">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  ¿PARA QUÉ SIRVEN LOS PUNTOS DE HABILIDAD (💎 PH)?
+                </div>
+                <p className="text-xs text-stone-300 leading-relaxed font-medieval">
+                  Los <strong>Puntos de Habilidad (PH)</strong> representan la experiencia marcial y la maestría arcana que tus héroes acumulan al aniquilar monstruos del Caos y completar misiones.
+                </p>
+                <div className="grid sm:grid-cols-3 gap-2 pt-1 text-[11px] font-sans text-stone-300">
+                  <div className="bg-stone-900/80 p-2 rounded border border-stone-800">
+                    <span className="text-amber-400 font-bold block">1. Golpes y Técnicas</span>
+                    Desbloquea habilidades como <em>Torbellino</em>, <em>Impacto Demoledor</em>, <em>Armonía Silvana</em> o <em>Nova Cósmica</em> para usarlas en combate.
+                  </div>
+                  <div className="bg-stone-900/80 p-2 rounded border border-stone-800">
+                    <span className="text-emerald-400 font-bold block">2. Bonos Permanentes</span>
+                    Aumenta tus Dados de Ataque, Dados de Defensa, Puntos de Cuerpo (vida) y casillas de movimiento para siempre.
+                  </div>
+                  <div className="bg-stone-900/80 p-2 rounded border border-stone-800">
+                    <span className="text-cyan-400 font-bold block">3. Pertrechos y Armas</span>
+                    Visita la pestaña de <strong>La Armería</strong> para comprar espadas, escudos, cotas de malla y pociones con tus monedas de oro.
+                  </div>
+                </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
