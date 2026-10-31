@@ -48,11 +48,6 @@ export function canCrossBoundary(
       if (match1 || match2) return true;
     }
 
-    // Check door placed on one of the tiles
-    const onFrom = d.x === fromX && d.y === fromY;
-    const onTo = d.x === toX && d.y === toY;
-    if (onFrom || onTo) return true;
-
     return false;
   });
 
@@ -284,25 +279,26 @@ export function getMonsterMovePath(
     .filter((m) => !m.isDead && m.id !== monster.id)
     .map((m) => ({ x: m.x, y: m.y }));
 
-  // Find closest hero
-  let closestHero = livingHeroes[0];
-  let minD = 999;
-  for (const h of livingHeroes) {
-    const d = Math.abs(h.x - monster.x) + Math.abs(h.y - monster.y);
-    if (d < minD) {
-      minD = d;
-      closestHero = h;
-    }
-  }
+  // Already adjacent AND directly reachable without a solid wall separating them!
+  const isAlreadyAdjacentAndReachable = livingHeroes.some((h) => {
+    const dx = Math.abs(h.x - monster.x);
+    const dy = Math.abs(h.y - monster.y);
+    const isAdj = dx <= 1 && dy <= 1 && (dx + dy > 0);
+    return isAdj && canCrossBoundary(monster.x, monster.y, h.x, h.y, quest.rooms, quest.doors);
+  });
 
-  // Already adjacent!
-  if (minD === 1) {
+  if (isAlreadyAdjacentAndReachable) {
     return [];
   }
 
-  // Target: any walkable tile adjacent to closestHero
+  // Target: any walkable tile adjacent to a living hero that can physically strike the hero
   const isAdjacentToHero = (pt: Point) => {
-    return Math.abs(closestHero.x - pt.x) + Math.abs(closestHero.y - pt.y) === 1;
+    return livingHeroes.some((h) => {
+      const dx = Math.abs(h.x - pt.x);
+      const dy = Math.abs(h.y - pt.y);
+      const isAdj = dx <= 1 && dy <= 1 && (dx + dy > 0);
+      return isAdj && canCrossBoundary(pt.x, pt.y, h.x, h.y, quest.rooms, quest.doors);
+    });
   };
 
   const path = findBFSPath(

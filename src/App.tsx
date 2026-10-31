@@ -16,6 +16,9 @@ import { InstructionsModal } from './components/InstructionsModal';
 import { HeroLoreModal } from './components/HeroLoreModal';
 import { SkillsUpgradeModal } from './components/SkillsUpgradeModal';
 import { QuestOutcomeModal } from './components/QuestOutcomeModal';
+import { PartyOverviewModal } from './components/PartyOverviewModal';
+import { QuestBriefingModal } from './components/QuestBriefingModal';
+import { GameLogModal } from './components/GameLogModal';
 
 export default function App() {
   // Game Navigation & Phase
@@ -46,6 +49,9 @@ export default function App() {
   const [combatState, setCombatState] = useState<CombatState | null>(null);
   const [pendingMorcarAttacks, setPendingMorcarAttacks] = useState<CombatState[]>([]);
   const [showSpellDialog, setShowSpellDialog] = useState<boolean>(false);
+  const [showPartyModal, setShowPartyModal] = useState<boolean>(false);
+  const [showQuestBriefing, setShowQuestBriefing] = useState<boolean>(false);
+  const [showLogsModal, setShowLogsModal] = useState<boolean>(false);
   const [outcomeState, setOutcomeState] = useState<{ isOpen: boolean; isVictory: boolean }>({
     isOpen: false,
     isVictory: false,
@@ -1077,21 +1083,19 @@ export default function App() {
         addLog(`👹 ${monster.name} avanza ${movePath.length} casillas acechando a los héroes.`, 'danger');
       }
 
-      // 2. Check if adjacent to a living hero to attack
-      let closestHero = livingHeroes[0];
-      let minDistance = 999;
-      livingHeroes.forEach((hero) => {
-        const d = Math.abs(hero.x - monster.x) + Math.abs(hero.y - monster.y);
-        if (d < minDistance) {
-          minDistance = d;
-          closestHero = hero;
-        }
+      // 2. Check if physically adjacent to any reachable living hero (NOT separated by a wall or closed door!)
+      const reachableHeroes = livingHeroes.filter((hero) => {
+        const dx = Math.abs(hero.x - monster.x);
+        const dy = Math.abs(hero.y - monster.y);
+        const isAdj = dx <= 1 && dy <= 1 && (dx + dy > 0);
+        if (!isAdj) return false;
+        return canCrossBoundary(monster.x, monster.y, hero.x, hero.y, activeQuest.rooms, activeQuest.doors);
       });
 
-      // If adjacent, queue attack!
-      if (minDistance === 1) {
+      if (reachableHeroes.length > 0) {
+        const targetHero = reachableHeroes[0];
         const atkRoll = rollCombatDice(monster.attackDice);
-        const defRoll = rollCombatDice(closestHero.defendDice);
+        const defRoll = rollCombatDice(targetHero.defendDice);
 
         const hits = atkRoll.skulls;
         const blocks = defRoll.whiteShields;
@@ -1101,15 +1105,15 @@ export default function App() {
           attackerName: monster.name,
           attackerType: 'monster',
           attackerAttackDice: monster.attackDice,
-          defenderName: closestHero.name,
+          defenderName: targetHero.name,
           defenderType: 'hero',
-          defenderDefendDice: closestHero.defendDice,
-          defenderBodyPoints: closestHero.bodyPoints,
+          defenderDefendDice: targetHero.defendDice,
+          defenderBodyPoints: targetHero.bodyPoints,
           attackerRoll: atkRoll,
           defenderRoll: defRoll,
           damageDealt: dmg,
           resolved: false,
-          targetId: closestHero.id,
+          targetId: targetHero.id,
           isBoss: Boolean(monster.isBoss),
         });
       }
@@ -1231,9 +1235,29 @@ export default function App() {
           onOpenSkills={() => setShowSkills(true)}
         />
       ) : (
-        /* Dungeon Exploration & Board View */
-        <div className="flex-1 flex flex-col p-3 sm:p-5 max-w-7xl mx-auto w-full space-y-4">
-          {/* Top HUD with action console and status cards */}
+        /* Dungeon Exploration & Board View: VIEWPORT-LOCKED WITH PINNED COMMAND DOCK */
+        <div className="h-screen w-screen overflow-hidden flex flex-col md:flex-row bg-[#080706]">
+          {/* Main Dungeon Arena: Board takes center stage without vertical page scrolling */}
+          <main className="flex-1 h-full overflow-auto flex flex-col items-center justify-start md:justify-center p-3 sm:p-6 relative select-none">
+            <DungeonBoard
+              quest={activeQuest}
+              heroes={heroes}
+              activeHero={activeHero}
+              monsters={activeQuest.monsters}
+              validMoves={validMoves}
+              targetableMonsters={targetableMonsters}
+              adjacentDoors={adjacentDoors}
+              adjacentFurniture={adjacentFurniture}
+              onTileClick={handleTileClick}
+              onMonsterClick={handleMonsterClick}
+              onDoorClick={handleOpenDoor}
+              onFurnitureClick={handleFurnitureClick}
+              isMoving={movementRemaining > 0}
+              allObjectivesComplete={areAllObjectivesComplete}
+            />
+          </main>
+
+          {/* Pinned Fixed Command Dock: Active Hero & Actions without clutter */}
           <HUD
             quest={activeQuest}
             heroes={heroes}
@@ -1275,24 +1299,9 @@ export default function App() {
             onOpenLore={() => setShowLore(true)}
             onReturnToTitle={() => setGamePhase('title')}
             onGenerateRandomDungeon={startRandomQuest}
-          />
-
-          {/* Authentic 16-Bit Grid Board */}
-          <DungeonBoard
-            quest={activeQuest}
-            heroes={heroes}
-            activeHero={activeHero}
-            monsters={activeQuest.monsters}
-            validMoves={validMoves}
-            targetableMonsters={targetableMonsters}
-            adjacentDoors={adjacentDoors}
-            adjacentFurniture={adjacentFurniture}
-            onTileClick={handleTileClick}
-            onMonsterClick={handleMonsterClick}
-            onDoorClick={handleOpenDoor}
-            onFurnitureClick={handleFurnitureClick}
-            isMoving={movementRemaining > 0}
-            allObjectivesComplete={areAllObjectivesComplete}
+            onOpenPartyOverview={() => setShowPartyModal(true)}
+            onOpenQuestBriefing={() => setShowQuestBriefing(true)}
+            onOpenGameLogs={() => setShowLogsModal(true)}
           />
         </div>
       )}
@@ -1361,6 +1370,34 @@ export default function App() {
         onNextOrRetry={handleNextOrRetry}
         onOpenSkills={() => setShowSkills(true)}
         onDescendNextFloor={handleDescendNextFloor}
+      />
+
+      {/* Floating Party Overview Modal */}
+      <PartyOverviewModal
+        isOpen={showPartyModal}
+        onClose={() => setShowPartyModal(false)}
+        heroes={heroes}
+        activeHeroIndex={activeHeroIndex}
+        onToggleHeroAI={handleToggleHeroAI}
+        onOpenSkills={() => setShowSkills(true)}
+      />
+
+      {/* Floating Quest Briefing & Objectives Modal */}
+      <QuestBriefingModal
+        isOpen={showQuestBriefing}
+        onClose={() => setShowQuestBriefing(false)}
+        quest={activeQuest}
+        isBossDefeated={isBossDefeated}
+        bossName={bossName}
+        livingMonstersCount={livingMonstersCount}
+        areAllObjectivesComplete={areAllObjectivesComplete}
+      />
+
+      {/* Floating Complete Game Log Modal */}
+      <GameLogModal
+        isOpen={showLogsModal}
+        onClose={() => setShowLogsModal(false)}
+        logs={logs}
       />
     </div>
   );
