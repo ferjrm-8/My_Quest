@@ -172,11 +172,13 @@ export function getSmartAIMove(
   movementRemaining = 6
 ): Point | null {
   const stepsAvailable = movementRemaining <= 0 ? 6 : movementRemaining;
-  const validMoves = getValidHeroMoves(hero, quest, allHeroes, stepsAvailable);
-  const unvisitedMoves = validMoves.filter((m) => !visitedThisTurn.has(`${m.x},${m.y}`));
+  const immediateValidMoves = getValidHeroMoves(hero, quest, allHeroes, stepsAvailable);
+  if (immediateValidMoves.length === 0) return null;
 
-  const candidates = unvisitedMoves.length > 0 ? unvisitedMoves : validMoves;
-  if (candidates.length === 0) return null;
+  const unvisitedMoves = immediateValidMoves.filter(
+    (m) => !visitedThisTurn.has(`${m.x},${m.y}`)
+  );
+  const candidates = unvisitedMoves.length > 0 ? unvisitedMoves : immediateValidMoves;
 
   const revealedMonsters = monsters.filter((m) => !m.isDead && m.revealed);
   const closedDoors = quest.doors.filter((d) => !d.isOpen);
@@ -187,6 +189,23 @@ export function getSmartAIMove(
       (m) => Math.abs(m.x - hero.x) + Math.abs(m.y - hero.y) === 1
     );
     if (isAdjacentToMonster) return null; // Already adjacent, attack!
+
+    const otherOccupants: Point[] = [
+      ...allHeroes.filter((h) => !h.isDead && h.id !== hero.id).map((h) => ({ x: h.x, y: h.y })),
+      ...monsters.filter((m) => !m.isDead && m.revealed).map((m) => ({ x: m.x, y: m.y })),
+    ];
+
+    const isGoal = (pt: Point) =>
+      revealedMonsters.some((m) => Math.abs(m.x - pt.x) + Math.abs(m.y - pt.y) === 1);
+
+    const fullPath = findBFSPath({ x: hero.x, y: hero.y }, isGoal, quest, otherOccupants);
+    if (fullPath.length > 0) {
+      const nextStepInPath = fullPath[0];
+      const matchingCandidate = candidates.find(
+        (c) => c.x === nextStepInPath.x && c.y === nextStepInPath.y
+      );
+      if (matchingCandidate) return { x: matchingCandidate.x, y: matchingCandidate.y };
+    }
 
     candidates.sort((a, b) => {
       const minA = Math.min(...revealedMonsters.map((m) => Math.abs(m.x - a.x) + Math.abs(m.y - a.y)));
@@ -203,6 +222,23 @@ export function getSmartAIMove(
       (d) => Math.abs(d.x - hero.x) + Math.abs(d.y - hero.y) <= 1
     );
     if (!isAdjacentToDoor) {
+      const otherOccupants: Point[] = [
+        ...allHeroes.filter((h) => !h.isDead && h.id !== hero.id).map((h) => ({ x: h.x, y: h.y })),
+        ...monsters.filter((m) => !m.isDead && m.revealed).map((m) => ({ x: m.x, y: m.y })),
+      ];
+
+      const isDoorGoal = (pt: Point) =>
+        closedDoors.some((d) => Math.abs(d.x - pt.x) + Math.abs(d.y - pt.y) <= 1);
+
+      const doorPath = findBFSPath({ x: hero.x, y: hero.y }, isDoorGoal, quest, otherOccupants);
+      if (doorPath.length > 0) {
+        const nextDoorStep = doorPath[0];
+        const matchingCandidate = candidates.find(
+          (c) => c.x === nextDoorStep.x && c.y === nextDoorStep.y
+        );
+        if (matchingCandidate) return { x: matchingCandidate.x, y: matchingCandidate.y };
+      }
+
       candidates.sort((a, b) => {
         const minA = Math.min(...closedDoors.map((d) => Math.abs(d.x - a.x) + Math.abs(d.y - a.y)));
         const minB = Math.min(...closedDoors.map((d) => Math.abs(d.x - b.x) + Math.abs(d.y - b.y)));
@@ -215,6 +251,22 @@ export function getSmartAIMove(
   // Goal 3: Follow party leader or human player
   const leader = allHeroes.find((h) => !h.isDead && !h.isAI) || allHeroes[0];
   if (leader && leader.id !== hero.id) {
+    const otherOccupants: Point[] = [
+      ...allHeroes.filter((h) => !h.isDead && h.id !== hero.id).map((h) => ({ x: h.x, y: h.y })),
+      ...monsters.filter((m) => !m.isDead && m.revealed).map((m) => ({ x: m.x, y: m.y })),
+    ];
+
+    const isLeaderGoal = (pt: Point) => Math.abs(leader.x - pt.x) + Math.abs(leader.y - pt.y) <= 2;
+
+    const leaderPath = findBFSPath({ x: hero.x, y: hero.y }, isLeaderGoal, quest, otherOccupants);
+    if (leaderPath.length > 0) {
+      const nextLeaderStep = leaderPath[0];
+      const matchingCandidate = candidates.find(
+        (c) => c.x === nextLeaderStep.x && c.y === nextLeaderStep.y
+      );
+      if (matchingCandidate) return { x: matchingCandidate.x, y: matchingCandidate.y };
+    }
+
     candidates.sort((a, b) => {
       const distA = Math.abs(leader.x - a.x) + Math.abs(leader.y - a.y);
       const distB = Math.abs(leader.x - b.x) + Math.abs(leader.y - b.y);
@@ -284,9 +336,10 @@ export interface HeroMoveDestination {
 }
 
 /**
- * Calculates all valid step destinations for the active hero using BFS flood-fill based on HeroQuest rules:
- * 1. An empty tile costs 1 movement point.
- * 2. Friendly living heroes can be passed through (traversed), allowing the hero to step past them into empty tiles.
+ * Calculates ONLY immediate step destinations for the active hero based on HeroQuest rules:
+ * 1. An adjacent empty walkable tile costs 1 movement.
+ * 2. Friendly living heroes can be passed through (traversed) if the hero has sufficient movement,
+ *    allowing the hero to land on the immediate empty walkable tile beyond them (costing 2 or more movement points).
  * 3. Heroes CANNOT end their movement on any occupied tile (neither friendly hero nor monster).
  * 4. Monsters CANNOT be passed through or landed on under any circumstances.
  * 5. Closed doors, walls, and furniture block movement completely.
@@ -311,40 +364,33 @@ export function getValidHeroMoves(
     { dx: 1, dy: 0 },
   ];
 
-  // BFS Queue: { x, y, cost, alliesPassed }
-  const queue: { x: number; y: number; cost: number; alliesPassed: Hero[] }[] = [
-    { x: activeHero.x, y: activeHero.y, cost: 0, alliesPassed: [] },
-  ];
+  const results: HeroMoveDestination[] = [];
 
-  const minCostMap = new Map<string, number>();
-  minCostMap.set(`${activeHero.x},${activeHero.y}`, 0);
+  for (const { dx, dy } of dirs) {
+    let currX = activeHero.x;
+    let currY = activeHero.y;
+    let stepsNeeded = 0;
+    const alliesPassedInDir: Hero[] = [];
 
-  const destinationMap = new Map<string, HeroMoveDestination>();
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-
-    for (const { dx, dy } of dirs) {
-      const nextX = current.x + dx;
-      const nextY = current.y + dy;
-      const nextCost = current.cost + 1;
-
-      if (nextCost > movementRemaining) continue;
+    while (stepsNeeded < movementRemaining) {
+      const nextX = currX + dx;
+      const nextY = currY + dy;
+      stepsNeeded++;
 
       // 1. Bounds check
-      if (nextX < 0 || nextX >= mapWidth || nextY < 0 || nextY >= mapHeight) continue;
+      if (nextX < 0 || nextX >= mapWidth || nextY < 0 || nextY >= mapHeight) break;
 
       // 2. Strict room wall collision
-      if (!canCrossBoundary(current.x, current.y, nextX, nextY, rooms, doors)) continue;
+      if (!canCrossBoundary(currX, currY, nextX, nextY, rooms, doors)) break;
 
       // 3. Closed door check
-      if (doors.some((d) => d.x === nextX && d.y === nextY && !d.isOpen)) continue;
+      if (doors.some((d) => d.x === nextX && d.y === nextY && !d.isOpen)) break;
 
       // 4. Furniture check
-      if (furniture.some((f) => nextX >= f.x && nextX < f.x + f.w && nextY >= f.y && nextY < f.y + f.h)) continue;
+      if (furniture.some((f) => nextX >= f.x && nextX < f.x + f.w && nextY >= f.y && nextY < f.y + f.h)) break;
 
       // 5. Monster check (Monsters block completely)
-      if (blockingMonsters.some((m) => m.x === nextX && m.y === nextY)) continue;
+      if (blockingMonsters.some((m) => m.x === nextX && m.y === nextY)) break;
 
       // 6. Unrevealed room check
       const targetRoom = getRoomAtCoord(nextX, nextY, rooms);
@@ -356,44 +402,32 @@ export function getValidHeroMoves(
               (d.tileA && isSamePoint(d.tileA, { x: nextX, y: nextY })) ||
               (d.tileB && isSamePoint(d.tileB, { x: nextX, y: nextY })))
         );
-        if (!hasOpenDoor) continue;
+        if (!hasOpenDoor) break;
       }
 
-      const key = `${nextX},${nextY}`;
-      const prevBest = minCostMap.get(key);
-      if (prevBest !== undefined && prevBest <= nextCost) continue;
-      minCostMap.set(key, nextCost);
-
-      // 7. Ally check
+      // 7. Check if occupied by a living friendly hero
       const allyAtTile = livingAllies.find((h) => h.x === nextX && h.y === nextY);
       if (allyAtTile) {
-        // Cannot stop on ally tile; continue queue to step through
-        queue.push({
-          x: nextX,
-          y: nextY,
-          cost: nextCost,
-          alliesPassed: [...current.alliesPassed, allyAtTile],
-        });
-      } else {
-        // Empty tile! Valid destination.
-        destinationMap.set(key, {
-          x: nextX,
-          y: nextY,
-          cost: nextCost,
-          alliesPassed: [...current.alliesPassed],
-        });
-
-        // Continue search from this empty tile
-        queue.push({
-          x: nextX,
-          y: nextY,
-          cost: nextCost,
-          alliesPassed: [...current.alliesPassed],
-        });
+        // Cannot stop on ally tile; traverse over ally to next tile in this direction
+        alliesPassedInDir.push(allyAtTile);
+        currX = nextX;
+        currY = nextY;
+        continue;
       }
+
+      // Empty walkable tile! This is the immediate step destination in this direction.
+      results.push({
+        x: nextX,
+        y: nextY,
+        cost: stepsNeeded,
+        alliesPassed: [...alliesPassedInDir],
+      });
+
+      // Stop searching in this direction once the immediate empty tile is found
+      break;
     }
   }
 
-  return Array.from(destinationMap.values());
+  return results;
 }
 

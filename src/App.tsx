@@ -1497,8 +1497,9 @@ export default function App() {
         }
       }
 
-      // 7. If closed door is adjacent, open it!
-      if (adjacentDoors.length > 0) {
+      // 7. If closed door is adjacent AND no active revealed monsters are present, open it!
+      const hasRevealedMonsters = activeQuest.monsters.some((m) => !m.isDead && m.revealed);
+      if (adjacentDoors.length > 0 && !hasRevealedMonsters) {
         handleOpenDoor(adjacentDoors[0]);
         return;
       }
@@ -1523,7 +1524,7 @@ export default function App() {
 
       // 9. End turn
       handleEndTurn();
-    }, 700);
+    }, 450);
 
     return () => clearTimeout(aiTimer);
   }, [

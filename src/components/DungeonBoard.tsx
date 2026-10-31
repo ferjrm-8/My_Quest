@@ -12,6 +12,8 @@ interface FurnitureViewProps {
 const FurnitureView: React.FC<FurnitureViewProps> = ({ furniture, isInteractive, onClick }) => {
   const { type, name, w, h, searched } = furniture;
 
+  const isMultiTile = w > 1 || h > 1;
+
   return (
     <div
       onClick={(e) => {
@@ -21,11 +23,11 @@ const FurnitureView: React.FC<FurnitureViewProps> = ({ furniture, isInteractive,
         }
       }}
       style={{
-        width: `calc(${w * 100}% + ${(w - 1) * 1}px)`,
-        height: `calc(${h * 100}% + ${(h - 1) * 1}px)`,
+        width: isMultiTile ? `calc(${w * 100}% + ${(w - 1) * 1}px)` : '100%',
+        height: isMultiTile ? `calc(${h * 100}% + ${(h - 1) * 1}px)` : '100%',
       }}
       title={`${name} ${searched ? '(Vacío / Registrado)' : '(Sin abrir)'}`}
-      className={`absolute top-0 left-0 z-28 rounded-lg transition-all select-none flex items-center justify-center p-0.5 border-2 shadow-[0_8px_20px_rgba(0,0,0,0.95)] ${
+      className={`absolute ${isMultiTile ? 'top-0 left-0' : 'inset-0.5'} z-28 rounded-lg transition-all select-none flex items-center justify-center p-0.5 border-2 shadow-[0_8px_20px_rgba(0,0,0,0.95)] overflow-hidden ${
         searched
           ? 'opacity-50 bg-[#171310]/95 border-stone-700 cursor-default'
           : isInteractive
@@ -35,15 +37,15 @@ const FurnitureView: React.FC<FurnitureViewProps> = ({ furniture, isInteractive,
     >
       {/* CHEST DESIGN */}
       {type === 'chest' && (
-        <div className="relative w-full h-full flex flex-col items-center justify-between p-1 bg-gradient-to-b from-[#92400e] via-[#78350f] to-[#451a03] rounded border border-amber-500/80 shadow-inner overflow-hidden">
+        <div className="relative w-full h-full flex flex-col items-center justify-between p-0.5 bg-gradient-to-b from-[#92400e] via-[#78350f] to-[#451a03] rounded border border-amber-500/80 shadow-inner overflow-hidden">
           {/* Iron/Brass Reinforcement Brackets on 4 Corners */}
-          <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-[#ca8a04] border-t border-l border-amber-200 rounded-tl shadow" />
-          <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-[#ca8a04] border-t border-r border-amber-200 rounded-tr shadow" />
-          <div className="absolute bottom-0 left-0 w-2.5 h-2.5 bg-[#ca8a04] border-b border-l border-amber-200 rounded-bl shadow" />
-          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#ca8a04] border-b border-r border-amber-200 rounded-br shadow" />
+          <div className="absolute top-0 left-0 w-2 h-2 bg-[#ca8a04] border-t border-l border-amber-200 rounded-tl shadow" />
+          <div className="absolute top-0 right-0 w-2 h-2 bg-[#ca8a04] border-t border-r border-amber-200 rounded-tr shadow" />
+          <div className="absolute bottom-0 left-0 w-2 h-2 bg-[#ca8a04] border-b border-l border-amber-200 rounded-bl shadow" />
+          <div className="absolute bottom-0 right-0 w-2 h-2 bg-[#ca8a04] border-b border-r border-amber-200 rounded-br shadow" />
 
           {/* Wooden Grain Horizontal Planks */}
-          <div className="w-full h-full flex flex-col justify-between py-0.5">
+          <div className="w-full h-full flex flex-col justify-between py-0.5 pointer-events-none">
             <div className="w-full h-[1px] bg-stone-900/60" />
             <div className="w-full h-[1px] bg-stone-900/60" />
           </div>
@@ -52,13 +54,13 @@ const FurnitureView: React.FC<FurnitureViewProps> = ({ furniture, isInteractive,
           <div className="absolute inset-0 flex items-center justify-center">
             {searched ? (
               <div className="flex flex-col items-center justify-center">
-                <span className="text-base sm:text-xl drop-shadow">📦</span>
-                <span className="text-[7px] font-pixel text-stone-400 font-bold tracking-tighter uppercase">VACÍO</span>
+                <span className="text-sm sm:text-lg drop-shadow leading-none">📦</span>
+                <span className="text-[6px] font-pixel text-stone-400 font-bold tracking-tighter uppercase">VACÍO</span>
               </div>
             ) : (
-              <div className="flex items-center gap-1 bg-amber-950/90 px-2 py-0.5 rounded border border-yellow-400 shadow-[0_0_12px_rgba(234,179,8,0.9)]">
-                <span className="text-base sm:text-xl leading-none drop-shadow-md">🎁</span>
-                <div className="w-2.5 h-3.5 bg-gradient-to-b from-yellow-300 via-amber-500 to-yellow-600 rounded-xs border border-amber-200 shadow flex items-center justify-center text-[7px]">
+              <div className="flex items-center gap-0.5 bg-amber-950/90 px-1.5 py-0.5 rounded border border-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.9)]">
+                <span className="text-sm sm:text-base leading-none drop-shadow-md">🎁</span>
+                <div className="w-2 h-3 bg-gradient-to-b from-yellow-300 via-amber-500 to-yellow-600 rounded-xs border border-amber-200 shadow flex items-center justify-center text-[6px]">
                   🔑
                 </div>
               </div>
@@ -69,10 +71,10 @@ const FurnitureView: React.FC<FurnitureViewProps> = ({ furniture, isInteractive,
 
       {/* TOMB / SARCOPHAGUS DESIGN */}
       {type === 'tomb' && (
-        <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#57534e] via-[#292524] to-[#1c1917] rounded border-2 border-stone-500 shadow-2xl p-1 overflow-hidden">
+        <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#57534e] via-[#292524] to-[#1c1917] rounded border-2 border-stone-500 shadow-2xl p-0.5 overflow-hidden">
           <div className="absolute inset-1 border border-stone-600/50 rounded-xs" />
-          <span className="text-lg sm:text-2xl drop-shadow-lg z-10">⚰️</span>
-          <span className="text-[8px] font-pixel text-stone-300 font-bold uppercase tracking-widest mt-0.5 z-10">
+          <span className="text-base sm:text-xl drop-shadow-lg z-10">⚰️</span>
+          <span className="text-[7px] font-pixel text-stone-300 font-bold uppercase tracking-widest mt-0.5 z-10">
             {searched ? 'DESPOJADO' : 'SARCÓFAGO'}
           </span>
         </div>
@@ -80,35 +82,35 @@ const FurnitureView: React.FC<FurnitureViewProps> = ({ furniture, isInteractive,
 
       {/* TABLE DESIGN */}
       {type === 'table' && (
-        <div className="relative w-full h-full flex items-center justify-around bg-gradient-to-r from-[#451a03] via-[#78350f] to-[#451a03] rounded border-2 border-amber-700 shadow-xl px-2">
-          <span className="text-sm sm:text-lg drop-shadow">📜</span>
-          <span className="text-sm sm:text-lg drop-shadow">🧪</span>
-          <span className="text-sm sm:text-lg drop-shadow">🕯️</span>
+        <div className="relative w-full h-full flex items-center justify-around bg-gradient-to-r from-[#451a03] via-[#78350f] to-[#451a03] rounded border-2 border-amber-700 shadow-xl px-1">
+          <span className="text-xs sm:text-base drop-shadow">📜</span>
+          <span className="text-xs sm:text-base drop-shadow">🧪</span>
+          <span className="text-xs sm:text-base drop-shadow">🕯️</span>
         </div>
       )}
 
       {/* THRONE DESIGN */}
       {type === 'throne' && (
-        <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#1c1917] via-[#292524] to-[#0c0a09] rounded-lg border-2 border-amber-600 shadow-2xl p-1">
+        <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#1c1917] via-[#292524] to-[#0c0a09] rounded-lg border-2 border-amber-600 shadow-2xl p-0.5">
           <div className="w-3/4 h-2/3 bg-red-950/90 border border-red-700 rounded-t flex items-center justify-center shadow-inner">
-            <span className="text-base sm:text-xl drop-shadow">👑</span>
+            <span className="text-sm sm:text-lg drop-shadow">👑</span>
           </div>
         </div>
       )}
 
       {/* WEAPONS RACK DESIGN */}
       {type === 'weapons_rack' && (
-        <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-b from-[#78350f] to-[#291104] rounded border-2 border-amber-600 shadow-xl gap-1">
-          <span className="text-base sm:text-xl drop-shadow">🛡️</span>
-          <span className="text-base sm:text-xl drop-shadow">⚔️</span>
+        <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-b from-[#78350f] to-[#291104] rounded border-2 border-amber-600 shadow-xl gap-0.5">
+          <span className="text-sm sm:text-lg drop-shadow">🛡️</span>
+          <span className="text-sm sm:text-lg drop-shadow">⚔️</span>
         </div>
       )}
 
       {/* BOOKSHELF DESIGN */}
       {type === 'bookshelf' && (
-        <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-b from-[#451a03] to-[#1c1917] rounded border-2 border-amber-700 shadow-xl gap-1">
-          <span className="text-base sm:text-xl drop-shadow">📚</span>
-          <span className="text-base sm:text-xl drop-shadow">🔮</span>
+        <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-b from-[#451a03] to-[#1c1917] rounded border-2 border-amber-700 shadow-xl gap-0.5">
+          <span className="text-sm sm:text-lg drop-shadow">📚</span>
+          <span className="text-sm sm:text-lg drop-shadow">🔮</span>
         </div>
       )}
     </div>
@@ -154,6 +156,75 @@ const TrapView: React.FC<TrapViewProps> = ({ trap }) => {
           </span>
         </div>
       )}
+    </div>
+  );
+};
+
+// 3D Isometric Descending Dungeon Staircase / Trapdoor
+interface ExitStaircaseViewProps {
+  allObjectivesComplete: boolean;
+}
+
+const ExitStaircaseView: React.FC<ExitStaircaseViewProps> = ({ allObjectivesComplete }) => {
+  return (
+    <div
+      className={`absolute inset-0.5 rounded-lg flex flex-col items-center justify-between p-1 z-28 shadow-2xl border-2 transition-all overflow-hidden select-none ${
+        allObjectivesComplete
+          ? 'bg-gradient-to-b from-[#78350f] via-[#b45309] to-[#1c1917] border-yellow-300 ring-4 ring-yellow-400/90 animate-pulse shadow-[0_0_24px_rgba(250,204,21,0.95)]'
+          : 'bg-gradient-to-b from-[#1c1917] via-[#0c0a09] to-[#030202] border-stone-700/80 text-stone-500'
+      }`}
+      title={
+        allObjectivesComplete
+          ? 'Escalera de Salida Abierta: ¡Camina aquí para escapar con la victoria!'
+          : 'Escalera Sellada: Debes derrotar al Jefe Supremo y eliminar a todos los monstruos.'
+      }
+    >
+      {/* 3D Descending Stone Steps */}
+      <div className="relative w-full h-full flex flex-col items-center justify-center gap-[1px]">
+        {/* Step 1 */}
+        <div
+          className={`w-full h-1.5 rounded-t border-t border-x ${
+            allObjectivesComplete ? 'bg-amber-200 border-amber-100 shadow-[0_0_8px_#fde047]' : 'bg-stone-700 border-stone-600'
+          }`}
+        />
+        {/* Step 2 */}
+        <div
+          className={`w-[85%] h-1.5 border-t border-x ${
+            allObjectivesComplete ? 'bg-amber-400 border-amber-300 shadow' : 'bg-stone-800 border-stone-700'
+          }`}
+        />
+        {/* Step 3 */}
+        <div
+          className={`w-[70%] h-1.5 border-t border-x ${
+            allObjectivesComplete ? 'bg-amber-600 border-amber-500 shadow' : 'bg-stone-900 border-stone-800'
+          }`}
+        />
+        {/* Step 4 (Deep abyss) */}
+        <div
+          className={`w-[55%] h-1.5 rounded-b border-t ${
+            allObjectivesComplete ? 'bg-amber-900 border-amber-700 shadow-inner' : 'bg-[#030202] border-stone-950'
+          }`}
+        />
+
+        {/* Center Overlay Badge */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          {allObjectivesComplete ? (
+            <div className="flex flex-col items-center animate-bounce">
+              <span className="text-xs sm:text-sm drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">✨🪜✨</span>
+              <span className="text-[6px] font-pixel font-bold text-yellow-200 tracking-tighter bg-amber-950/90 px-1 py-0.5 rounded border border-yellow-300 shadow">
+                ¡LIBRE!
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center">
+              <span className="text-xs sm:text-sm drop-shadow-md">🔒⛓️</span>
+              <span className="text-[6px] font-pixel font-bold text-stone-400 tracking-tighter bg-stone-950/90 px-1 py-0.5 rounded border border-stone-800">
+                SELLADA
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -529,24 +600,7 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
 
           {/* DUNGEON STAIRCASE (Entrance / Exit) */}
           {visible && isExit && (
-            <div
-              className={`absolute inset-0.5 rounded-lg flex flex-col items-center justify-center z-15 shadow-xl border-2 transition ${
-                allObjectivesComplete
-                  ? 'bg-gradient-to-b from-amber-900/90 via-yellow-900/90 to-stone-950 border-yellow-300 ring-4 ring-yellow-400/80 animate-pulse text-yellow-200'
-                  : 'bg-gradient-to-b from-stone-900 to-stone-950 border-stone-600 text-stone-400'
-              }`}
-            >
-              <span className="text-sm sm:text-base leading-none drop-shadow">
-                {allObjectivesComplete ? '✨🪜' : '🪜🔒'}
-              </span>
-              <span
-                className={`text-[6px] sm:text-[7px] font-pixel font-bold mt-0.5 tracking-tighter ${
-                  allObjectivesComplete ? 'text-yellow-300' : 'text-stone-400'
-                }`}
-              >
-                {allObjectivesComplete ? 'SALIDA LIBRE' : 'SELLADA'}
-              </span>
-            </div>
+            <ExitStaircaseView allObjectivesComplete={allObjectivesComplete} />
           )}
 
           {/* DETECTED / SPRUNG TRAPS */}
