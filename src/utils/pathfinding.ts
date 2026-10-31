@@ -312,3 +312,147 @@ export function getMonsterMovePath(
   // Return at most monster.moveSpaces steps
   return path.slice(0, monster.moveSpaces);
 }
+
+export interface HeroMoveDestination {
+  x: number;
+  y: number;
+  cost: number;
+  alliesPassed: Hero[];
+}
+
+/**
+ * Calculates all valid step destinations for the active hero based on HeroQuest rules:
+ * 1. An adjacent empty walkable tile costs 1 movement.
+ * 2. Friendly living heroes can be passed through (traversed) if the hero has sufficient movement,
+ *    allowing the hero to land on empty walkable tiles beyond them (costing 2 or more movement points).
+ * 3. Heroes CANNOT end their movement on any occupied tile (neither friendly hero nor monster).
+ * 4. Monsters CANNOT be passed through or landed on under any circumstances.
+ * 5. Closed doors, walls, and furniture block movement and cannot be traversed.
+ */
+export function getValidHeroMoves(
+  activeHero: Hero,
+  quest: Quest,
+  allHeroes: Hero[],
+  movementRemaining: number
+): HeroMoveDestination[] {
+  if (movementRemaining <= 0 || activeHero.isDead) return [];
+
+  const { mapWidth, mapHeight, rooms, doors, furniture, monsters } = quest;
+  const startPt: Point = { x: activeHero.x, y: activeHero.y };
+
+  const livingAllies = allHeroes.filter((h) => !h.isDead && h.id !== activeHero.id);
+  const blockingMonsters = monsters.filter((m) => !m.isDead && m.revealed);
+
+  const dirs = [
+    { dx: 0, dy: -1 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 },
+    { dx: 1, dy: 0 },
+  ];
+
+  interface SearchNode {
+    x: number;
+    y: number;
+    cost: number;
+    allies: Hero[];
+  }
+
+  const minCostMap = new Map<string, number>();
+  minCostMap.set(`${startPt.x},${startPt.y}`, 0);
+
+  const destinationsMap = new Map<string, HeroMoveDestination>();
+  const queue: SearchNode[] = [{ x: startPt.x, y: startPt.y, cost: 0, allies: [] }];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    if (current.cost >= movementRemaining) continue;
+
+    for (const { dx, dy } of dirs) {
+      const nx = current.x + dx;
+      const ny = current.y + dy;
+      const nextKey = `${nx},${ny}`;
+      const nextCost = current.cost + 1;
+
+      // 1. Map bounds
+      if (nx < 0 || nx >= mapWidth || ny < 0 || ny >= mapHeight) continue;
+
+      // 2. Strict room wall collision
+      if (!canCrossBoundary(current.x, current.y, nx, ny, rooms, doors)) continue;
+
+      // 3. Closed door blocks
+      if (doors.some((d) => d.x === nx && d.y === ny && !d.isOpen)) continue;
+
+      // 4. Furniture blocks
+      if (furniture.some((f) => nx >= f.x && nx < f.x + f.w && ny >= f.y && ny < f.y + f.h)) continue;
+
+      // 5. Unrevealed room check (must enter via open door)
+      const targetRoom = getRoomAtCoord(nx, ny, rooms);
+      if (targetRoom && !targetRoom.revealed) {
+        const hasOpenDoor = doors.some(
+          (d) =>
+            d.isOpen &&
+            ((d.x === nx && d.y === ny) ||
+              (d.tileA && isSamePoint(d.tileA, { x: nx, y: ny })) ||
+              (d.tileB && isSamePoint(d.tileB, { x: nx, y: ny })))
+        );
+        if (!hasOpenDoor) continue;
+      }
+
+      // 6. Living monster blocks tile completely (cannot pass through, cannot land)
+      if (blockingMonsters.some((m) => m.x === nx && m.y === ny)) continue;
+
+      // 7. Check if occupied by a living friendly hero
+      const allyAtTile = livingAllies.find((h) => h.x === nx && h.y === ny);
+
+      if (allyAtTile) {
+        // HeroQuest rule: Heroes CANNOT end movement on an ally's square,
+        // but CAN pass through if sufficient movement remains!
+        const existingCost = minCostMap.get(nextKey) ?? Infinity;
+        if (nextCost < existingCost) {
+          minCostMap.set(nextKey, nextCost);
+          queue.push({
+            x: nx,
+            y: ny,
+            cost: nextCost,
+            allies: [...current.allies, allyAtTile],
+          });
+        }
+      } else {
+        // Empty walkable square!
+        // Valid destination if it's an adjacent single step OR reachable by passing through allies
+        const isAdjacentStep = current.cost === 0;
+        const isPassingAlly = current.allies.length > 0;
+
+        if (isAdjacentStep || isPassingAlly) {
+          const existingDest = destinationsMap.get(nextKey);
+          if (!existingDest || nextCost < existingDest.cost) {
+            destinationsMap.set(nextKey, {
+              x: nx,
+              y: ny,
+              cost: nextCost,
+              alliesPassed: current.allies,
+            });
+          }
+        }
+
+        // If we passed an ally, we can continue searching through any further consecutive allies
+        const existingCost = minCostMap.get(nextKey) ?? Infinity;
+        if (nextCost < existingCost) {
+          minCostMap.set(nextKey, nextCost);
+          if (current.allies.length > 0) {
+            queue.push({
+              x: nx,
+              y: ny,
+              cost: nextCost,
+              allies: current.allies,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return Array.from(destinationsMap.values());
+}
+

@@ -74,6 +74,7 @@ interface HUDProps {
   onOpenPartyOverview?: () => void;
   onOpenQuestBriefing?: () => void;
   onOpenGameLogs?: () => void;
+  isCombatActive?: boolean;
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -120,6 +121,7 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenPartyOverview,
   onOpenQuestBriefing,
   onOpenGameLogs,
+  isCombatActive = false,
 }) => {
   const [bgmActive, setBgmActive] = useState(audio.getBgmState());
   const [soundMuted, setSoundMuted] = useState(audio.isMuted());
@@ -137,8 +139,8 @@ export const HUD: React.FC<HUDProps> = ({
     setBgmActive(state);
   };
 
-  // Get most recent 2 logs
-  const recentLogs = logs.slice(-2);
+  // Get most recent 4 logs as requested
+  const recentLogs = logs.slice(-4);
 
   return (
     <aside className="w-full md:w-84 lg:w-96 bg-stone-900 border-t-2 md:border-t-0 md:border-l-2 border-stone-800 flex flex-col justify-between shrink-0 shadow-2xl z-20 overflow-y-auto max-h-[45vh] md:max-h-full">
@@ -246,9 +248,12 @@ export const HUD: React.FC<HUDProps> = ({
             </div>
             <button
               onClick={onMorcarStep}
-              className="w-full py-3 px-4 bg-gradient-to-r from-purple-800 to-purple-600 hover:from-purple-700 hover:to-purple-500 text-white font-pixel text-xs rounded-lg border-2 border-purple-400 shadow-xl transition cursor-pointer font-bold flex items-center justify-center gap-2"
+              disabled={isCombatActive}
+              className={`w-full py-3 px-4 bg-gradient-to-r from-purple-800 to-purple-600 hover:from-purple-700 hover:to-purple-500 text-white font-pixel text-xs rounded-lg border-2 border-purple-400 shadow-xl transition font-bold flex items-center justify-center gap-2 ${
+                isCombatActive ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              }`}
             >
-              <span>EJECUTAR TURNO DE MORCAR</span>
+              <span>{isCombatActive ? 'RESOLVIENDO COMBATE...' : 'EJECUTAR TURNO DE MORCAR'}</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -554,14 +559,14 @@ export const HUD: React.FC<HUDProps> = ({
           </button>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
           {recentLogs.map((log) => (
             <div
               key={log.id}
-              className="text-[10px] font-medieval text-stone-400 truncate bg-stone-900/60 p-1.5 rounded border border-stone-800/60"
+              className="text-[10px] font-medieval text-stone-300 leading-tight bg-stone-900/80 p-1.5 rounded border border-stone-800 flex items-start gap-1.5"
             >
-              <span className="text-stone-500 font-pixel text-[8px] mr-1">[{log.timestamp}]</span>
-              {log.text}
+              <span className="text-stone-500 font-pixel text-[8px] shrink-0 mt-0.5">[{log.timestamp}]</span>
+              <span className="flex-1">{log.text}</span>
             </div>
           ))}
         </div>

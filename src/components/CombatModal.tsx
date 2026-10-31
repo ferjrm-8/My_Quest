@@ -38,8 +38,10 @@ export const CombatModal: React.FC<CombatModalProps> = ({
   onConfirm,
 }) => {
   const [animStep, setAnimStep] = useState<'rolling' | 'attack_shown' | 'defend_shown' | 'done'>('rolling');
+  const [isConfirming, setIsConfirming] = useState<boolean>(false);
 
   useEffect(() => {
+    setIsConfirming(false);
     if (!isOpen) {
       setAnimStep('rolling');
       return;
@@ -237,10 +239,14 @@ export const CombatModal: React.FC<CombatModalProps> = ({
         {/* Footer */}
         <div className="bg-stone-950 p-4 border-t border-stone-800 flex justify-end">
           <button
-            onClick={onConfirm}
-            disabled={animStep !== 'done'}
+            onClick={() => {
+              if (isConfirming || animStep !== 'done') return;
+              setIsConfirming(true);
+              onConfirm();
+            }}
+            disabled={animStep !== 'done' || isConfirming}
             className={`px-6 py-2.5 rounded font-pixel text-xs transition border flex items-center gap-2 ${
-              animStep === 'done'
+              animStep === 'done' && !isConfirming
                 ? 'bg-red-700 hover:bg-red-600 text-white border-red-500 cursor-pointer font-bold shadow-lg'
                 : 'bg-stone-800 text-stone-500 border-stone-700 cursor-not-allowed'
             }`}

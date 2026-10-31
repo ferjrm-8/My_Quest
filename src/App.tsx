@@ -4,7 +4,7 @@ import { QUESTS } from './data/questsData';
 import { createInitialHeroes } from './data/heroesData';
 import { rollCombatDice, rollMovementDice } from './utils/dice';
 import { audio } from './utils/audio';
-import { canCrossBoundary, getSmartAIMove, getMonsterMovePath } from './utils/pathfinding';
+import { canCrossBoundary, getSmartAIMove, getMonsterMovePath, getValidHeroMoves, HeroMoveDestination } from './utils/pathfinding';
 import { generateProceduralQuest } from './utils/dungeonGenerator';
 
 import { TitleScreen } from './components/TitleScreen';
@@ -47,7 +47,10 @@ export default function App() {
   const [initialLoreHero, setInitialLoreHero] = useState<HeroClass>('barbarian');
   const [showSkills, setShowSkills] = useState<boolean>(false);
   const [combatState, setCombatState] = useState<CombatState | null>(null);
-  const [pendingMorcarAttacks, setPendingMorcarAttacks] = useState<CombatState[]>([]);
+  const [pendingMonsterQueue, setPendingMonsterQueue] = useState<Monster[]>([]);
+  const isMorcarProcessing = useRef<boolean>(false);
+  const [activeActorOverride, setActiveActorOverride] = useState<{ x: number; y: number } | null>(null);
+  const pendingMorcarCallbackRef = useRef<(() => void) | null>(null);
   const [showSpellDialog, setShowSpellDialog] = useState<boolean>(false);
   const [showPartyModal, setShowPartyModal] = useState<boolean>(false);
   const [showQuestBriefing, setShowQuestBriefing] = useState<boolean>(false);
@@ -73,6 +76,7 @@ export default function App() {
   }, []);
 
   const activeHero = heroes[activeHeroIndex] || heroes[0];
+  const activeActorTile = activeActorOverride || (activeHero ? { x: activeHero.x, y: activeHero.y } : null);
 
   // Initialize a quest
   const startQuest = useCallback((questToStart: Quest) => {
@@ -170,28 +174,15 @@ export default function App() {
     [activeQuest, heroes, activeHero, getRoomAt]
   );
 
-  // Calculate valid movement tiles for active hero
-  const validMoves = React.useMemo(() => {
+  // Calculate valid movement destinations for active hero (supports passing through allies!)
+  const validHeroMoveDestinations = React.useMemo(() => {
     if (movementRemaining <= 0 || activeHero.isDead || isMorcarTurn) return [];
+    return getValidHeroMoves(activeHero, activeQuest, heroes, movementRemaining);
+  }, [movementRemaining, activeHero, isMorcarTurn, activeQuest, heroes]);
 
-    const moves: { x: number; y: number }[] = [];
-    const dirs = [
-      { dx: 0, dy: -1 },
-      { dx: 0, dy: 1 },
-      { dx: -1, dy: 0 },
-      { dx: 1, dy: 0 },
-    ];
-
-    dirs.forEach(({ dx, dy }) => {
-      const nx = activeHero.x + dx;
-      const ny = activeHero.y + dy;
-      if (isTileWalkable(nx, ny)) {
-        moves.push({ x: nx, y: ny });
-      }
-    });
-
-    return moves;
-  }, [movementRemaining, activeHero, isMorcarTurn, isTileWalkable]);
+  const validMoves = React.useMemo(() => {
+    return validHeroMoveDestinations.map((d) => ({ x: d.x, y: d.y }));
+  }, [validHeroMoveDestinations]);
 
   // Targetable monsters for attack (Supports 8-directional melee: orthogonal + diagonal!)
   const targetableMonsters = React.useMemo(() => {
@@ -308,12 +299,24 @@ export default function App() {
     );
   };
 
-  // ACTION: Move to adjacent tile
+  // ACTION: Move to destination tile (supporting passing through allies!)
   const handleTileClick = useCallback(
     (x: number, y: number) => {
       if (movementRemaining <= 0) return;
 
       audio.playStep();
+
+      // Look up destination metadata (movement cost & allies traversed)
+      const moveDest = validHeroMoveDestinations.find((d) => d.x === x && d.y === y);
+      const stepCost = moveDest ? moveDest.cost : 1;
+
+      if (moveDest && moveDest.alliesPassed.length > 0) {
+        const allyNames = moveDest.alliesPassed.map((a) => a.name).join(' y ');
+        addLog(
+          `👣 ¡${activeHero.name} pasa por encima de ${allyNames} y avanza! (Gasta ${stepCost} movimientos)`,
+          'info'
+        );
+      }
 
       // Check if stepping on a trap
       const trap = activeQuest.traps.find((t) => t.x === x && t.y === y && !t.sprung);
@@ -336,7 +339,7 @@ export default function App() {
       };
 
       setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
-      setMovementRemaining((prev) => prev - 1);
+      setMovementRemaining((prev) => Math.max(0, prev - stepCost));
 
       if (updatedHero.isDead) {
         addLog(`💀 ¡${updatedHero.name} ha muerto en las profundidades de la mazmorra!`, 'danger');
@@ -380,10 +383,10 @@ export default function App() {
         }
       }
     },
-    [movementRemaining, activeQuest, activeHero, addLog]
+    [movementRemaining, validHeroMoveDestinations, activeQuest, activeHero, addLog]
   );
 
-  // Directional move (for Arrow keys, WASD, and D-Pad)
+  // Directional move (for Arrow keys, WASD, and D-Pad with ally pass-through!)
   const handleDirectionalMove = useCallback(
     (dir: 'up' | 'down' | 'left' | 'right') => {
       if (movementRemaining <= 0 || activeHero.isDead || isMorcarTurn) return;
@@ -398,13 +401,63 @@ export default function App() {
       const targetX = activeHero.x + dx;
       const targetY = activeHero.y + dy;
 
-      if (isTileWalkable(targetX, targetY)) {
+      // 1. Direct 1-step move to adjacent empty tile
+      if (validHeroMoveDestinations.some((d) => d.x === targetX && d.y === targetY)) {
         handleTileClick(targetX, targetY);
-      } else {
-        audio.playBlock();
+        return;
       }
+
+      // 2. Check if an ally is occupying the immediate adjacent square
+      const allyInPath = heroes.find(
+        (h) => !h.isDead && h.id !== activeHero.id && h.x === targetX && h.y === targetY
+      );
+
+      if (allyInPath) {
+        // Look ahead 2, 3, or 4 steps in this direction for an empty valid destination
+        let leapDest: { x: number; y: number } | null = null;
+        for (let step = 2; step <= 4; step++) {
+          const testX = activeHero.x + step * dx;
+          const testY = activeHero.y + step * dy;
+          if (validHeroMoveDestinations.some((d) => d.x === testX && d.y === testY)) {
+            leapDest = { x: testX, y: testY };
+            break;
+          }
+        }
+
+        if (leapDest) {
+          handleTileClick(leapDest.x, leapDest.y);
+          return;
+        } else {
+          if (movementRemaining < 2) {
+            addLog(
+              `⚠️ Te faltan puntos de movimiento (${movementRemaining} restante) para rebasar a ${allyInPath.name}. ¡No puedes detenerte en su casilla!`,
+              'danger'
+            );
+          } else {
+            addLog(
+              `⚠️ El paso tras ${allyInPath.name} está bloqueado por un muro, puerta cerrada o monstruo.`,
+              'danger'
+            );
+          }
+          audio.playBlock();
+          return;
+        }
+      }
+
+      // 3. Check if blocked by a monster (HeroQuest: monsters CANNOT be passed through!)
+      const monsterAtTile = activeQuest.monsters.find(
+        (m) => !m.isDead && m.revealed && m.x === targetX && m.y === targetY
+      );
+      if (monsterAtTile) {
+        addLog(`⚠️ No puedes atravesar a ${monsterAtTile.name} ni ocupar su casilla.`, 'danger');
+        audio.playBlock();
+        return;
+      }
+
+      // 4. Other solid obstacles (walls, closed doors)
+      audio.playBlock();
     },
-    [movementRemaining, activeHero, isMorcarTurn, isTileWalkable, handleTileClick]
+    [movementRemaining, activeHero, isMorcarTurn, validHeroMoveDestinations, heroes, activeQuest.monsters, handleTileClick, addLog]
   );
 
   // Keyboard navigation listener (Arrow keys and WASD)
@@ -613,7 +666,7 @@ export default function App() {
 
   // ACTION: Attack Monster
   const handleMonsterClick = (monster: Monster) => {
-    if (activeHero.isDead) return;
+    if (activeHero.isDead || combatState) return;
 
     if (hasActed) {
       audio.playBlock();
@@ -679,7 +732,7 @@ export default function App() {
 
   // ACTION: Initiate Attack from Action Console Button
   const handleInitiateAttack = () => {
-    if (activeHero.isDead) return;
+    if (activeHero.isDead || combatState) return;
 
     if (hasActed) {
       audio.playBlock();
@@ -730,10 +783,13 @@ export default function App() {
 
   // Finish Morcar's turn cleanly and advance to the first living hero with fresh action & move state
   const finishMorcarTurn = useCallback(() => {
+    isMorcarProcessing.current = false;
+    setActiveActorOverride(null);
+    setPendingMonsterQueue([]);
     setIsMorcarTurn(false);
     setRoundNumber((prev) => prev + 1);
 
-    const firstLivingIndex = heroes.findIndex((h) => !h.isDead);
+    const firstLivingIndex = heroes.findIndex((h) => !h.isDead && h.bodyPoints > 0);
     const targetIndex = firstLivingIndex >= 0 ? firstLivingIndex : 0;
     setActiveHeroIndex(targetIndex);
     setMovementRemaining(0);
@@ -742,6 +798,77 @@ export default function App() {
     aiVisitedThisTurn.current.clear();
     addLog(`✨ NUEVA RONDA: Comienza el turno de ${heroes[targetIndex].name}.`, 'turn');
   }, [heroes, addLog]);
+
+  // Execute next monster attack in Morcar's sequence:
+  const executeNextMonsterAttack = useCallback(
+    (
+      queue: Monster[],
+      currentHeroes: Hero[],
+      currentMonsters: Monster[]
+    ) => {
+      let nextMonster: Monster | null = null;
+      let targetHero: Hero | null = null;
+      let remainingQueue: Monster[] = [];
+
+      for (let i = 0; i < queue.length; i++) {
+        const candidate = queue[i];
+        const freshMonster = currentMonsters.find((m) => m.id === candidate.id && !m.isDead);
+        if (!freshMonster) continue;
+
+        // Find LIVING adjacent heroes (strictly excluding any dead heroes!)
+        const livingAdjacent = currentHeroes.filter((h) => {
+          if (h.isDead || h.bodyPoints <= 0) return false;
+          const dx = Math.abs(h.x - freshMonster.x);
+          const dy = Math.abs(h.y - freshMonster.y);
+          const isAdj = dx <= 1 && dy <= 1 && (dx + dy > 0);
+          if (!isAdj) return false;
+          return canCrossBoundary(freshMonster.x, freshMonster.y, h.x, h.y, activeQuest.rooms, activeQuest.doors);
+        });
+
+        if (livingAdjacent.length > 0) {
+          nextMonster = freshMonster;
+          targetHero = livingAdjacent[0];
+          remainingQueue = queue.slice(i + 1);
+          break;
+        }
+      }
+
+      if (!nextMonster || !targetHero) {
+        // No further monster attacks possible in this turn
+        isMorcarProcessing.current = false;
+        setActiveActorOverride(null);
+        finishMorcarTurn();
+        return;
+      }
+
+      // Roll fresh combat dice at attack execution time with targetHero's current HP!
+      const atkRoll = rollCombatDice(nextMonster.attackDice);
+      const defRoll = rollCombatDice(targetHero.defendDice);
+      const hits = atkRoll.skulls;
+      const blocks = defRoll.whiteShields;
+      const dmg = Math.max(0, hits - blocks);
+
+      setPendingMonsterQueue(remainingQueue);
+      setActiveActorOverride({ x: nextMonster.x, y: nextMonster.y });
+
+      setCombatState({
+        attackerName: nextMonster.name,
+        attackerType: 'monster',
+        attackerAttackDice: nextMonster.attackDice,
+        defenderName: targetHero.name,
+        defenderType: 'hero',
+        defenderDefendDice: targetHero.defendDice,
+        defenderBodyPoints: targetHero.bodyPoints,
+        attackerRoll: atkRoll,
+        defenderRoll: defRoll,
+        damageDealt: dmg,
+        resolved: false,
+        targetId: targetHero.id,
+        isBoss: Boolean(nextMonster.isBoss),
+      });
+    },
+    [activeQuest.rooms, activeQuest.doors, finishMorcarTurn]
+  );
 
   // Resolve Combat Modal
   const handleConfirmCombat = () => {
@@ -812,8 +939,10 @@ export default function App() {
     } else {
       // Monster attacked Hero during Morcar's turn
       const hero = heroes.find((h) => h.id === targetId);
+      let updatedHeroesList = heroes;
+
       if (hero) {
-        const remainingHp = hero.bodyPoints - damageDealt;
+        const remainingHp = Math.max(0, hero.bodyPoints - damageDealt);
         const isDead = remainingHp <= 0;
 
         const updatedHero: Hero = {
@@ -822,15 +951,21 @@ export default function App() {
           isDead,
         };
 
-        setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
+        updatedHeroesList = heroes.map((h) => (h.id === updatedHero.id ? updatedHero : h));
+        setHeroes(updatedHeroesList);
 
         if (isDead) {
           audio.playDamage();
           addLog(`💀 ¡${hero.name} ha caído en combate ante el ataque de ${attackerName}!`, 'danger');
 
-          const allDead = heroes.every((h) => (h.id === hero.id ? true : h.isDead));
+          const allDead = updatedHeroesList.every((h) => h.isDead);
           if (allDead) {
+            setCombatState(null);
+            setPendingMonsterQueue([]);
+            isMorcarProcessing.current = false;
+            setActiveActorOverride(null);
             setOutcomeState({ isOpen: true, isVictory: false });
+            return;
           }
         } else {
           addLog(`🛡️ ${attackerName} hiere a ${hero.name} infligiendo ${damageDealt} de daño.`, 'combat');
@@ -838,18 +973,23 @@ export default function App() {
       }
 
       setCombatState(null);
-      // Defending against a monster MUST NEVER consume a hero's turn action!
       setHasActed(false);
 
-      // Check if more monster attacks are queued for this Morcar turn
-      if (pendingMorcarAttacks.length > 0) {
-        const nextAttack = pendingMorcarAttacks[0];
-        setPendingMorcarAttacks((prev) => prev.slice(1));
-        setCombatState(nextAttack);
+      if (pendingMorcarCallbackRef.current) {
+        const cb = pendingMorcarCallbackRef.current;
+        pendingMorcarCallbackRef.current = null;
+        cb();
+        return;
+      }
+
+      if (pendingMonsterQueue.length > 0) {
+        executeNextMonsterAttack(pendingMonsterQueue, updatedHeroesList, activeQuest.monsters);
         return;
       }
 
       // Conclude Morcar's turn cleanly
+      isMorcarProcessing.current = false;
+      setActiveActorOverride(null);
       finishMorcarTurn();
     }
   };
@@ -1058,33 +1198,102 @@ export default function App() {
     }
   }, [activeHeroIndex, heroes, addLog]);
 
-  // Morcar's Turn: MONSTERS ADVANCE AND ATTACK!
+  // Morcar's Turn: MONSTERS ADVANCE STEP-BY-STEP AND ATTACK (Cinematic step animation with camera auto-focus!)
   const handleMorcarStep = () => {
+    if (isMorcarProcessing.current || combatState) return;
+
     audio.playDamage();
 
-    const livingHeroes = heroes.filter((h) => !h.isDead);
+    const livingHeroes = heroes.filter((h) => !h.isDead && h.bodyPoints > 0);
     if (livingHeroes.length === 0) {
       setOutcomeState({ isOpen: true, isVictory: false });
       return;
     }
 
-    const updatedMonsters = activeQuest.monsters.map((m) => ({ ...m }));
-    const attacksQueue: CombatState[] = [];
+    isMorcarProcessing.current = true;
 
-    updatedMonsters.forEach((monster) => {
-      if (monster.isDead || !monster.revealed) return;
+    // Filter active, revealed, living monsters
+    const activeMonsters = activeQuest.monsters.filter((m) => !m.isDead && m.revealed);
 
-      // 1. Monsters move along shortest path towards closest hero!
-      const movePath = getMonsterMovePath(monster, activeQuest, livingHeroes, updatedMonsters);
-      if (movePath.length > 0) {
-        const dest = movePath[movePath.length - 1];
-        monster.x = dest.x;
-        monster.y = dest.y;
-        addLog(`👹 ${monster.name} avanza ${movePath.length} casillas acechando a los héroes.`, 'danger');
+    if (activeMonsters.length === 0) {
+      addLog(`Las sombras permanecen en calma. No hay criaturas despiertas.`, 'info');
+      isMorcarProcessing.current = false;
+      setActiveActorOverride(null);
+      finishMorcarTurn();
+      return;
+    }
+
+    let mIdx = 0;
+
+    const processNextMonster = () => {
+      if (mIdx >= activeMonsters.length) {
+        // All monsters processed!
+        isMorcarProcessing.current = false;
+        setActiveActorOverride(null);
+        finishMorcarTurn();
+        return;
       }
 
-      // 2. Check if physically adjacent to any reachable living hero (NOT separated by a wall or closed door!)
-      const reachableHeroes = livingHeroes.filter((hero) => {
+      const monsterRef = activeMonsters[mIdx];
+      mIdx++;
+
+      // Verify monster is still alive
+      const currentMonster = activeQuest.monsters.find((m) => m.id === monsterRef.id && !m.isDead);
+      if (!currentMonster) {
+        processNextMonster();
+        return;
+      }
+
+      const freshLivingHeroes = heroes.filter((h) => !h.isDead && h.bodyPoints > 0);
+      if (freshLivingHeroes.length === 0) {
+        isMorcarProcessing.current = false;
+        setActiveActorOverride(null);
+        setOutcomeState({ isOpen: true, isVictory: false });
+        return;
+      }
+
+      // Compute movement path
+      const movePath = getMonsterMovePath(currentMonster, activeQuest, freshLivingHeroes, activeQuest.monsters);
+
+      // Focus camera on monster before it moves
+      setActiveActorOverride({ x: currentMonster.x, y: currentMonster.y });
+
+      if (movePath.length === 0) {
+        // Monster doesn't move. Check if it can attack!
+        checkMonsterAttackAndProceed(currentMonster, freshLivingHeroes);
+      } else {
+        // Animate movement tile-by-tile
+        let stepIdx = 0;
+        addLog(`👹 ${currentMonster.name} avanza ${movePath.length} casillas acechando a los héroes.`, 'danger');
+
+        const moveInterval = setInterval(() => {
+          if (stepIdx >= movePath.length) {
+            clearInterval(moveInterval);
+            // Finished moving! Check attack
+            const updatedFreshMonster = { ...currentMonster, x: movePath[movePath.length - 1].x, y: movePath[movePath.length - 1].y };
+            checkMonsterAttackAndProceed(updatedFreshMonster, freshLivingHeroes);
+            return;
+          }
+
+          const nextTile = movePath[stepIdx];
+          stepIdx++;
+
+          // Update monster position in quest state
+          setActiveQuest((prev) => ({
+            ...prev,
+            monsters: prev.monsters.map((m) => (m.id === currentMonster.id ? { ...m, x: nextTile.x, y: nextTile.y } : m)),
+          }));
+
+          // Focus camera on current step tile & play step sound
+          setActiveActorOverride({ x: nextTile.x, y: nextTile.y });
+          audio.playStep();
+        }, 220);
+      }
+    };
+
+    const checkMonsterAttackAndProceed = (monster: Monster, freshLivingHeroes: Hero[]) => {
+      // Find reachable adjacent living heroes
+      const reachableHeroes = freshLivingHeroes.filter((hero) => {
         const dx = Math.abs(hero.x - monster.x);
         const dy = Math.abs(hero.y - monster.y);
         const isAdj = dx <= 1 && dy <= 1 && (dx + dy > 0);
@@ -1096,12 +1305,18 @@ export default function App() {
         const targetHero = reachableHeroes[0];
         const atkRoll = rollCombatDice(monster.attackDice);
         const defRoll = rollCombatDice(targetHero.defendDice);
-
         const hits = atkRoll.skulls;
         const blocks = defRoll.whiteShields;
         const dmg = Math.max(0, hits - blocks);
 
-        attacksQueue.push({
+        // Store callback to resume after combat modal
+        pendingMorcarCallbackRef.current = () => {
+          setTimeout(processNextMonster, 300);
+        };
+
+        setActiveActorOverride({ x: monster.x, y: monster.y });
+
+        setCombatState({
           attackerName: monster.name,
           attackerType: 'monster',
           attackerAttackDice: monster.attackDice,
@@ -1116,35 +1331,134 @@ export default function App() {
           targetId: targetHero.id,
           isBoss: Boolean(monster.isBoss),
         });
+      } else {
+        // No attack possible, proceed to next monster
+        setTimeout(processNextMonster, 180);
       }
-    });
+    };
 
-    setActiveQuest((prev) => ({ ...prev, monsters: updatedMonsters }));
-
-    if (attacksQueue.length === 0) {
-      addLog(`Los monstruos de Morcar vigilan los pasillos sin entablar combate en este asalto.`, 'info');
-      finishMorcarTurn();
-    } else {
-      // Trigger first attack modal and queue remaining attacks
-      setCombatState(attacksQueue[0]);
-      setPendingMorcarAttacks(attacksQueue.slice(1));
-    }
+    processNextMonster();
   };
 
-  // Automated Smart AI Hero behavior (Never oscillates!)
+  // Automated Smart AI Hero behavior with full resource management
   useEffect(() => {
     if (gamePhase !== 'dungeon' || isMorcarTurn || !activeHero.isAI || activeHero.isDead || combatState) {
       return;
     }
 
     const aiTimer = setTimeout(() => {
-      // 1. If has not rolled movement, roll movement dice
-      if (!hasRolledMovement) {
-        handleRollMovement();
+      // 0. Emergency Potion Drink if HP is low (<= 50% HP or <= 3 HP)
+      if (activeHero.bodyPoints <= Math.ceil(activeHero.maxBodyPoints * 0.5)) {
+        const potionIdx = activeHero.inventory.findIndex(
+          (i) => i.type === 'potion' || i.name.toLowerCase().includes('poción')
+        );
+        if (potionIdx >= 0) {
+          audio.playLoot();
+          const potion = activeHero.inventory[potionIdx];
+          const newHp = Math.min(activeHero.maxBodyPoints, activeHero.bodyPoints + 4);
+          const updatedInventory = activeHero.inventory.filter((_, idx) => idx !== potionIdx);
+          const updatedHero = { ...activeHero, bodyPoints: newHp, inventory: updatedInventory };
+          setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
+          addLog(
+            `🧪 ¡${activeHero.name} (IA) bebe una ${potion.name} y recupera 4 PV! (${newHp}/${activeHero.maxBodyPoints} PV)`,
+            'loot'
+          );
+          return;
+        }
+      }
+
+      // 0b. Smart Auto-Purchase Skills if affordable!
+      const affordableSkill = activeHero.skills.find(
+        (s) =>
+          !s.unlocked &&
+          activeHero.skillPoints >= s.costSkillPoints &&
+          activeHero.gold >= s.costGold &&
+          (!s.reqSkillId || activeHero.skills.some((req) => req.id === s.reqSkillId && req.unlocked))
+      );
+
+      if (affordableSkill) {
+        audio.playFanfare();
+        const updatedSkills = activeHero.skills.map((s) => (s.id === affordableSkill.id ? { ...s, unlocked: true } : s));
+        const bonusAtk = affordableSkill.passiveBonus?.attackDice || 0;
+        const bonusDef = affordableSkill.passiveBonus?.defendDice || 0;
+        const bonusHp = affordableSkill.passiveBonus?.maxBodyPoints || 0;
+
+        const updatedHero: Hero = {
+          ...activeHero,
+          gold: activeHero.gold - affordableSkill.costGold,
+          skillPoints: activeHero.skillPoints - affordableSkill.costSkillPoints,
+          skills: updatedSkills,
+          attackDice: activeHero.attackDice + bonusAtk,
+          defendDice: activeHero.defendDice + bonusDef,
+          maxBodyPoints: activeHero.maxBodyPoints + bonusHp,
+          bodyPoints: activeHero.bodyPoints + bonusHp,
+        };
+        setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
+        addLog(
+          `✨ ¡${activeHero.name} (IA) invierte sus recursos y desbloquea la habilidad: ${affordableSkill.name}!`,
+          'spell'
+        );
         return;
       }
 
-      // 2. If targetable monster is present, attack!
+      // Auto-buy Healing Potion if gold >= 100 and inventory has room
+      if (activeHero.gold >= 120 && activeHero.inventory.length < 5) {
+        const potionCount = activeHero.inventory.filter((i) => i.type === 'potion').length;
+        if (potionCount < 2) {
+          audio.playLoot();
+          const newPotion = {
+            id: `potion_ai_${Date.now()}`,
+            name: 'Poción de Curación',
+            type: 'potion' as const,
+            description: 'Restaura hasta 4 Puntos de Cuerpo perdidos.',
+            cost: 80,
+            usableBy: ['barbarian', 'dwarf', 'elf', 'wizard'] as HeroClass[],
+            icon: '🧪',
+            consumable: true,
+            effect: 'heal_4' as const,
+          };
+          const updatedHero: Hero = {
+            ...activeHero,
+            gold: activeHero.gold - 80,
+            inventory: [...activeHero.inventory, newPotion],
+          };
+          setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
+          addLog(`🛍️ ¡${activeHero.name} (IA) compra una Poción de Curación en la Armería (80🪙)!`, 'loot');
+          return;
+        }
+      }
+
+      // 1. Check if can cast heal spell on self or injured ally
+      if (canCastSpell) {
+        const healSpell = activeHero.spells.find((s) => !s.isUsed && s.effectType === 'heal');
+        if (healSpell) {
+          const injuredAlly = heroes.find((h) => !h.isDead && h.bodyPoints < h.maxBodyPoints);
+          if (injuredAlly) {
+            handleCastSpell(healSpell, injuredAlly.id, 'hero');
+            return;
+          }
+        }
+      }
+
+      // 2. If adjacent unsearched furniture is present, search it!
+      if (!hasActed && adjacentFurniture.length > 0) {
+        handleSearchAdjacentFurniture();
+        return;
+      }
+
+      // 3. If in room with no monsters and room hasn't been searched for treasure, search treasure!
+      if (!hasActed && canSearchTreasure) {
+        handleSearchTreasure();
+        return;
+      }
+
+      // 4. Disarm trap if adjacent
+      if (!hasActed && canDisarmTrap) {
+        handleDisarmTrap();
+        return;
+      }
+
+      // 5. If targetable monster is present, attack!
       if (targetableMonsters.length > 0 && !hasActed) {
         const targetMonster = activeQuest.monsters.find((m) => m.id === targetableMonsters[0]);
         if (targetMonster) {
@@ -1153,13 +1467,13 @@ export default function App() {
         }
       }
 
-      // 3. If closed door is adjacent, open it!
+      // 6. If closed door is adjacent, open it!
       if (adjacentDoors.length > 0) {
         handleOpenDoor(adjacentDoors[0]);
         return;
       }
 
-      // 4. If can move, use smart BFS pathfinder towards monsters or closed doors
+      // 7. If can move, use smart BFS pathfinder towards monsters, doors, or party leader
       if (movementRemaining > 0) {
         const smartStep = getSmartAIMove(
           activeHero,
@@ -1176,7 +1490,13 @@ export default function App() {
         }
       }
 
-      // 5. If no other moves, end turn
+      // 8. If movement has not been rolled, roll movement dice
+      if (!hasRolledMovement) {
+        handleRollMovement();
+        return;
+      }
+
+      // 9. End turn
       handleEndTurn();
     }, 700);
 
@@ -1190,6 +1510,11 @@ export default function App() {
     movementRemaining,
     targetableMonsters,
     adjacentDoors,
+    adjacentFurniture,
+    canSearchTreasure,
+    canSearchTraps,
+    canDisarmTrap,
+    canCastSpell,
     combatState,
     activeQuest,
     heroes,
@@ -1237,8 +1562,8 @@ export default function App() {
       ) : (
         /* Dungeon Exploration & Board View: VIEWPORT-LOCKED WITH PINNED COMMAND DOCK */
         <div className="h-screen w-screen overflow-hidden flex flex-col md:flex-row bg-[#080706]">
-          {/* Main Dungeon Arena: Board takes center stage without vertical page scrolling */}
-          <main className="flex-1 h-full overflow-auto flex flex-col items-center justify-start md:justify-center p-3 sm:p-6 relative select-none">
+          {/* Main Dungeon Arena: Scrollable board arena with auto-focus centering */}
+          <main className="flex-1 h-full overflow-auto flex flex-col items-center justify-start p-4 sm:p-8 relative select-none min-h-0">
             <DungeonBoard
               quest={activeQuest}
               heroes={heroes}
@@ -1254,6 +1579,7 @@ export default function App() {
               onFurnitureClick={handleFurnitureClick}
               isMoving={movementRemaining > 0}
               allObjectivesComplete={areAllObjectivesComplete}
+              activeActorTile={activeActorTile}
             />
           </main>
 
@@ -1302,6 +1628,7 @@ export default function App() {
             onOpenPartyOverview={() => setShowPartyModal(true)}
             onOpenQuestBriefing={() => setShowQuestBriefing(true)}
             onOpenGameLogs={() => setShowLogsModal(true)}
+            isCombatActive={Boolean(combatState)}
           />
         </div>
       )}
