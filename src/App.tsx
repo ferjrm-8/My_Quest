@@ -44,6 +44,7 @@ export default function App() {
   const [initialLoreHero, setInitialLoreHero] = useState<HeroClass>('barbarian');
   const [showSkills, setShowSkills] = useState<boolean>(false);
   const [combatState, setCombatState] = useState<CombatState | null>(null);
+  const [pendingMorcarAttacks, setPendingMorcarAttacks] = useState<CombatState[]>([]);
   const [showSpellDialog, setShowSpellDialog] = useState<boolean>(false);
   const [outcomeState, setOutcomeState] = useState<{ isOpen: boolean; isVictory: boolean }>({
     isOpen: false,
@@ -606,7 +607,39 @@ export default function App() {
 
   // ACTION: Attack Monster
   const handleMonsterClick = (monster: Monster) => {
-    if (hasActed || activeHero.isDead) return;
+    if (activeHero.isDead) return;
+
+    if (hasActed) {
+      audio.playBlock();
+      addLog(
+        `⚠️ ${activeHero.name} ya realizó su acción este asalto. En HeroQuest solo se permite 1 acción por turno. Pulsa "FIN DEL TURNO" para avanzar la ronda.`,
+        'info'
+      );
+      return;
+    }
+
+    const hasCrossbow = activeHero.inventory.some((i) => i.rangedAttack);
+    const dx = Math.abs(monster.x - activeHero.x);
+    const dy = Math.abs(monster.y - activeHero.y);
+    const isAdjacent = dx <= 1 && dy <= 1 && (dx + dy > 0);
+    const inRange = hasCrossbow ? dx + dy <= 5 : isAdjacent;
+
+    if (!inRange) {
+      audio.playBlock();
+      if (activeHero.heroClass === 'wizard') {
+        const readySpells = activeHero.spells.filter((s) => !s.isUsed).length;
+        addLog(
+          `🧙‍♂️ ${activeHero.name} (Mago) no puede alcanzar a ${monster.name} cuerpo a cuerpo. ¡Haz clic en el botón azul "HECHIZO" (${readySpells} disponibles) para dañarlo a distancia con tus conjuros!`,
+          'info'
+        );
+      } else {
+        addLog(
+          `⚔️ ${monster.name} está fuera de alcance para ${activeHero.name}. Para atacar cuerpo a cuerpo debes desplazarte hasta una casilla contigua al enemigo (1 casilla).`,
+          'info'
+        );
+      }
+      return;
+    }
 
     if (monster.isBoss) {
       addLog(`⚡ ¡COMBATE CONTRA EL JEFE! ${activeHero.name} ataca a ${monster.name}!`, 'danger');
@@ -637,6 +670,72 @@ export default function App() {
       isBoss: Boolean(monster.isBoss),
     });
   };
+
+  // ACTION: Initiate Attack from Action Console Button
+  const handleInitiateAttack = () => {
+    if (activeHero.isDead) return;
+
+    if (hasActed) {
+      audio.playBlock();
+      addLog(
+        `⚠️ ${activeHero.name} ya realizó su acción este turno (buscar tesoros, trampas o atacar). En HeroQuest solo se permite 1 acción por ronda. Pulsa "FIN DEL TURNO".`,
+        'info'
+      );
+      return;
+    }
+
+    if (targetableMonsters.length > 0) {
+      const firstTarget = activeQuest.monsters.find((m) => targetableMonsters.includes(m.id));
+      if (firstTarget) handleMonsterClick(firstTarget);
+    } else {
+      audio.playBlock();
+      if (activeHero.heroClass === 'wizard') {
+        const readySpells = activeHero.spells.filter((s) => !s.isUsed).length;
+        addLog(
+          `🧙‍♂️ ${activeHero.name} (Mago) porta una Daga corta y no tiene monstruos adyacentes a 1 casilla. ¡Usa el botón "HECHIZO" (${readySpells} disponibles) para atacar a distancia con magia!`,
+          'info'
+        );
+      } else {
+        addLog(
+          `⚔️ No hay criaturas a 1 casilla de ${activeHero.name}. Para atacar cuerpo a cuerpo debes desplazarte hasta quedar pegado a un enemigo.`,
+          'info'
+        );
+      }
+    }
+  };
+
+  // ACTION: Toggle Hero AI / Manual mode on the fly
+  const handleToggleHeroAI = (heroId: string) => {
+    audio.playStep();
+    setHeroes((prev) =>
+      prev.map((h) => {
+        if (h.id === heroId) {
+          const nextState = !h.isAI;
+          addLog(
+            `${nextState ? '🤖' : '👤'} ${h.name} ahora está en modo ${nextState ? 'CONTROL POR IA' : 'CONTROL MANUAL (JUGADOR)'}.`,
+            'info'
+          );
+          return { ...h, isAI: nextState };
+        }
+        return h;
+      })
+    );
+  };
+
+  // Finish Morcar's turn cleanly and advance to the first living hero with fresh action & move state
+  const finishMorcarTurn = useCallback(() => {
+    setIsMorcarTurn(false);
+    setRoundNumber((prev) => prev + 1);
+
+    const firstLivingIndex = heroes.findIndex((h) => !h.isDead);
+    const targetIndex = firstLivingIndex >= 0 ? firstLivingIndex : 0;
+    setActiveHeroIndex(targetIndex);
+    setMovementRemaining(0);
+    setHasRolledMovement(false);
+    setHasActed(false);
+    aiVisitedThisTurn.current.clear();
+    addLog(`✨ NUEVA RONDA: Comienza el turno de ${heroes[targetIndex].name}.`, 'turn');
+  }, [heroes, addLog]);
 
   // Resolve Combat Modal
   const handleConfirmCombat = () => {
@@ -700,8 +799,12 @@ export default function App() {
           );
         }
       }
+
+      // Hero attacked on their turn -> consumes this hero's action
+      setCombatState(null);
+      setHasActed(true);
     } else {
-      // Monster attacked Hero
+      // Monster attacked Hero during Morcar's turn
       const hero = heroes.find((h) => h.id === targetId);
       if (hero) {
         const remainingHp = hero.bodyPoints - damageDealt;
@@ -727,10 +830,22 @@ export default function App() {
           addLog(`🛡️ ${attackerName} hiere a ${hero.name} infligiendo ${damageDealt} de daño.`, 'combat');
         }
       }
-    }
 
-    setCombatState(null);
-    setHasActed(true);
+      setCombatState(null);
+      // Defending against a monster MUST NEVER consume a hero's turn action!
+      setHasActed(false);
+
+      // Check if more monster attacks are queued for this Morcar turn
+      if (pendingMorcarAttacks.length > 0) {
+        const nextAttack = pendingMorcarAttacks[0];
+        setPendingMorcarAttacks((prev) => prev.slice(1));
+        setCombatState(nextAttack);
+        return;
+      }
+
+      // Conclude Morcar's turn cleanly
+      finishMorcarTurn();
+    }
   };
 
   // ACTION: Search Room for Treasure
@@ -948,7 +1063,7 @@ export default function App() {
     }
 
     const updatedMonsters = activeQuest.monsters.map((m) => ({ ...m }));
-    let attacksMade = 0;
+    const attacksQueue: CombatState[] = [];
 
     updatedMonsters.forEach((monster) => {
       if (monster.isDead || !monster.revealed) return;
@@ -973,9 +1088,8 @@ export default function App() {
         }
       });
 
-      // If adjacent, attack!
+      // If adjacent, queue attack!
       if (minDistance === 1) {
-        attacksMade++;
         const atkRoll = rollCombatDice(monster.attackDice);
         const defRoll = rollCombatDice(closestHero.defendDice);
 
@@ -983,7 +1097,7 @@ export default function App() {
         const blocks = defRoll.whiteShields;
         const dmg = Math.max(0, hits - blocks);
 
-        setCombatState({
+        attacksQueue.push({
           attackerName: monster.name,
           attackerType: 'monster',
           attackerAttackDice: monster.attackDice,
@@ -1003,15 +1117,14 @@ export default function App() {
 
     setActiveQuest((prev) => ({ ...prev, monsters: updatedMonsters }));
 
-    if (attacksMade === 0) {
+    if (attacksQueue.length === 0) {
       addLog(`Los monstruos de Morcar vigilan los pasillos sin entablar combate en este asalto.`, 'info');
+      finishMorcarTurn();
+    } else {
+      // Trigger first attack modal and queue remaining attacks
+      setCombatState(attacksQueue[0]);
+      setPendingMorcarAttacks(attacksQueue.slice(1));
     }
-
-    setIsMorcarTurn(false);
-    setRoundNumber((prev) => prev + 1);
-
-    const firstLivingIndex = heroes.findIndex((h) => !h.isDead);
-    setActiveHeroIndex(firstLivingIndex >= 0 ? firstLivingIndex : 0);
   };
 
   // Automated Smart AI Hero behavior (Never oscillates!)
@@ -1146,10 +1259,8 @@ export default function App() {
             unlockedActiveSkill={unlockedActiveSkill}
             onUseActiveSkill={handleUseActiveSkill}
             onRollMovement={handleRollMovement}
-            onInitiateAttack={() => {
-              const firstTarget = activeQuest.monsters.find((m) => targetableMonsters.includes(m.id));
-              if (firstTarget) handleMonsterClick(firstTarget);
-            }}
+            onInitiateAttack={handleInitiateAttack}
+            onToggleHeroAI={handleToggleHeroAI}
             onOpenSpellCast={() => setShowSpellDialog(true)}
             onSearchTreasure={handleSearchTreasure}
             onSearchTraps={handleSearchTraps}

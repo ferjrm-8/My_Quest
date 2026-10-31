@@ -68,6 +68,7 @@ interface HUDProps {
   onOpenLore: () => void;
   onReturnToTitle: () => void;
   onGenerateRandomDungeon?: () => void;
+  onToggleHeroAI?: (heroId: string) => void;
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -110,6 +111,7 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenLore,
   onReturnToTitle,
   onGenerateRandomDungeon,
+  onToggleHeroAI,
 }) => {
   const [bgmActive, setBgmActive] = useState(audio.getBgmState());
   const [soundMuted, setSoundMuted] = useState(audio.isMuted());
@@ -280,13 +282,31 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="flex items-center gap-2">
                 <HeroPortrait heroClass={hero.heroClass} size={36} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-1">
                     <span className="font-pixel text-[11px] text-stone-200 truncate font-bold">{hero.name}</span>
-                    {isActive && (
-                      <span className="text-[9px] font-pixel bg-amber-500 text-stone-950 px-1 rounded animate-pulse font-bold">
-                        TURNO
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {onToggleHeroAI && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleHeroAI(hero.id);
+                          }}
+                          className={`text-[8px] font-pixel px-1.5 py-0.5 rounded border transition cursor-pointer font-bold ${
+                            hero.isAI
+                              ? 'bg-purple-950/80 border-purple-500 text-purple-300 hover:bg-purple-900'
+                              : 'bg-emerald-950/80 border-emerald-500 text-emerald-300 hover:bg-emerald-900'
+                          }`}
+                          title={hero.isAI ? 'Héroe controlado por IA. Haz clic para controlarlo manualmente.' : 'Control Manual. Haz clic para delegar a la IA.'}
+                        >
+                          {hero.isAI ? '🤖 IA' : '👤 JUG'}
+                        </button>
+                      )}
+                      {isActive && (
+                        <span className="text-[9px] font-pixel bg-amber-500 text-stone-950 px-1 rounded animate-pulse font-bold">
+                          TURNO
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="text-[10px] text-stone-400 font-medieval truncate">{hero.title}</div>
                 </div>
@@ -449,17 +469,21 @@ export const HUD: React.FC<HUDProps> = ({
               {/* 2. Attack Button */}
               <button
                 onClick={onInitiateAttack}
-                disabled={hasActed || activeHero.isDead}
+                disabled={activeHero.isDead}
                 title={
                   hasActed
-                    ? 'Ya has realizado una acción este turno'
+                    ? 'Ya has realizado una acción este turno (buscar, lanzar hechizo o atacar). En HeroQuest solo se permite 1 acción por ronda.'
                     : !canAttack
-                    ? 'No hay enemigos a 1 casilla (acércate para golpear)'
+                    ? activeHero.heroClass === 'wizard'
+                      ? 'La Daga requiere un enemigo a 1 casilla adyacente. ¡Para atacar a distancia usa el botón HECHIZO!'
+                      : 'No hay enemigos a 1 casilla (muévete hasta quedar pegado al monstruo para golpearlo).'
                     : '¡Atacar a un monstruo adyacente!'
                 }
                 className={`py-2 px-2 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 border transition ${
-                  activeHero.isDead || hasActed
+                  activeHero.isDead
                     ? 'bg-stone-950 text-stone-600 border-stone-800 cursor-not-allowed'
+                    : hasActed
+                    ? 'bg-stone-950/80 text-stone-500 border-stone-800 cursor-pointer'
                     : canAttack
                     ? 'bg-red-900 hover:bg-red-800 text-red-100 border-red-500 shadow-lg cursor-pointer animate-pulse ring-2 ring-red-500/50'
                     : 'bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-stone-300 border-stone-700 cursor-pointer'
@@ -467,7 +491,13 @@ export const HUD: React.FC<HUDProps> = ({
               >
                 <Swords className="w-4 h-4" />
                 <span>
-                  {hasActed ? 'ACCIÓN USADA' : canAttack ? '⚔️ ¡ATACAR!' : 'ATACAR (1 CAS)'}
+                  {hasActed
+                    ? 'ACCIÓN USADA'
+                    : canAttack
+                    ? '⚔️ ¡ATACAR!'
+                    : activeHero.heroClass === 'wizard'
+                    ? 'DAGA (1 CAS)'
+                    : 'ATACAR (1 CAS)'}
                 </span>
               </button>
 
@@ -475,14 +505,23 @@ export const HUD: React.FC<HUDProps> = ({
               <button
                 onClick={onOpenSpellCast}
                 disabled={hasActed || !canCastSpell || activeHero.isDead}
+                title={
+                  canCastSpell
+                    ? 'Lanzar un hechizo elemental a distancia o a un aliado'
+                    : 'Sin hechizos disponibles o el héroe no posee grimorio'
+                }
                 className={`py-2 px-2 rounded font-pixel text-[10px] flex flex-col items-center justify-center gap-1 border transition ${
                   hasActed || !canCastSpell || activeHero.isDead
                     ? 'bg-stone-950 text-stone-600 border-stone-800 cursor-not-allowed'
-                    : 'bg-blue-950 hover:bg-blue-900 text-blue-300 border-blue-600 shadow-md cursor-pointer'
+                    : 'bg-blue-950 hover:bg-blue-900 text-blue-300 border-blue-600 shadow-md cursor-pointer animate-pulse'
                 }`}
               >
                 <Sparkles className="w-4 h-4" />
-                <span>HECHIZO</span>
+                <span>
+                  {activeHero.heroClass === 'wizard' || activeHero.heroClass === 'elf'
+                    ? `HECHIZO (${activeHero.spells.filter((s) => !s.isUsed).length})`
+                    : 'HECHIZO'}
+                </span>
               </button>
 
               {/* Active Special Skill (when unlocked) */}
