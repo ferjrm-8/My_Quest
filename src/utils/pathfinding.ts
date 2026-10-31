@@ -75,13 +75,7 @@ export function isTileWalkableGeneral(
     return false;
   }
 
-  // 3. Closed door blocks tile
-  const closedDoor = doors.find((d) => d.x === toX && d.y === toY && !d.isOpen);
-  if (closedDoor) {
-    return false;
-  }
-
-  // 4. Furniture blocks tile
+  // 3. Furniture blocks tile
   const hitFurniture = furniture.some(
     (f) => toX >= f.x && toX < f.x + f.w && toY >= f.y && toY < f.y + f.h
   );
@@ -383,10 +377,7 @@ export function getValidHeroMoves(
       // 2. Strict room wall collision
       if (!canCrossBoundary(currX, currY, nextX, nextY, rooms, doors)) break;
 
-      // 3. Closed door check
-      if (doors.some((d) => d.x === nextX && d.y === nextY && !d.isOpen)) break;
-
-      // 4. Furniture check
+      // 3. Furniture check
       if (furniture.some((f) => nextX >= f.x && nextX < f.x + f.w && nextY >= f.y && nextY < f.y + f.h)) break;
 
       // 5. Monster check (Monsters block completely)

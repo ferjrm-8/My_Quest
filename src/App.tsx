@@ -243,9 +243,14 @@ export default function App() {
 
   const canSearchTraps = Boolean(activeRoom ? !activeRoom.trapsSearched : true);
 
-  const canDisarmTrap = activeQuest.traps.some(
-    (t) => t.detected && !t.sprung && Math.abs(t.x - activeHero.x) + Math.abs(t.y - activeHero.y) === 1
-  );
+  const canDisarmTrap = activeQuest.traps.some((t) => {
+    if (!t.detected || t.sprung) return false;
+    const isAdj = Math.abs(t.x - activeHero.x) + Math.abs(t.y - activeHero.y) === 1;
+    if (!isAdj) return false;
+    if (!canCrossBoundary(activeHero.x, activeHero.y, t.x, t.y, activeQuest.rooms, activeQuest.doors)) return false;
+    const hasTools = activeHero.heroClass === 'dwarf' || activeHero.inventory.some((i) => i.effect === 'trap_tool');
+    return hasTools;
+  });
 
   const canAttack = targetableMonsters.length > 0;
   const canCastSpell =
@@ -1111,10 +1116,28 @@ export default function App() {
   const handleDisarmTrap = () => {
     if (hasActed || activeHero.isDead) return;
 
+    const hasTools = activeHero.heroClass === 'dwarf' || activeHero.inventory.some((i) => i.effect === 'trap_tool');
+    if (!hasTools) {
+      audio.playBlock();
+      addLog(
+        `⚠️ Solo el Enano o héroes equipados con el "Juego de Herramientas de Desarmar" pueden intentar desactivar trampas. Cómpralo en la Armería.`,
+        'info'
+      );
+      return;
+    }
+
     const nearbyTrap = activeQuest.traps.find(
-      (t) => t.detected && !t.sprung && Math.abs(t.x - activeHero.x) + Math.abs(t.y - activeHero.y) === 1
+      (t) =>
+        t.detected &&
+        !t.sprung &&
+        Math.abs(t.x - activeHero.x) + Math.abs(t.y - activeHero.y) === 1 &&
+        canCrossBoundary(activeHero.x, activeHero.y, t.x, t.y, activeQuest.rooms, activeQuest.doors)
     );
-    if (!nearbyTrap) return;
+    if (!nearbyTrap) {
+      audio.playBlock();
+      addLog(`⚠️ No hay trampas detectadas adyacentes a ${activeHero.name} sin muros de por medio.`, 'info');
+      return;
+    }
 
     if (activeHero.heroClass === 'dwarf') {
       audio.playLoot();
@@ -1122,7 +1145,7 @@ export default function App() {
       const updatedHero: Hero = { ...activeHero, gold: activeHero.gold + 25, skillPoints: activeHero.skillPoints + 1 };
       setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
       addLog(
-        `⛏️ ¡${activeHero.name} (Enano) neutraliza la trampa a la perfección y recupera 25🪙!`,
+        `⛏️ ¡${activeHero.name} (Enano) neutraliza la trampa a la perfección y recupera 25🪙 de piezas!`,
         'loot'
       );
     } else {
@@ -1135,11 +1158,11 @@ export default function App() {
           bodyPoints: Math.max(0, activeHero.bodyPoints - nearbyTrap.damage),
         };
         setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
-        addLog(`💥 ¡FALLO! La trampa detonó hiriendo a ${activeHero.name}.`, 'trap');
+        addLog(`💥 ¡FALLO AL DESARMAR! El resorte se activó e hirió a ${activeHero.name}.`, 'trap');
       } else {
         audio.playLoot();
         nearbyTrap.sprung = true;
-        addLog(`🛠️ ¡${activeHero.name} desactiva la trampa con éxito!`, 'loot');
+        addLog(`🛠️ ¡${activeHero.name} usa sus Herramientas de Zapador y desactiva la trampa con éxito!`, 'loot');
       }
     }
 

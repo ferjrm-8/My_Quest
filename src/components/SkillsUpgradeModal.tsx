@@ -135,7 +135,7 @@ export const SkillsUpgradeModal: React.FC<SkillsUpgradeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-5xl max-h-[90vh] bg-stone-900 border-4 border-amber-600 rounded-lg shadow-2xl flex flex-col overflow-hidden text-stone-200">
         {/* Header */}
         <div className="bg-gradient-to-r from-red-950 via-stone-900 to-amber-950 p-4 border-b-2 border-amber-600 flex items-center justify-between">
