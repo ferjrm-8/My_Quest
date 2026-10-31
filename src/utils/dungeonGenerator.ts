@@ -382,10 +382,32 @@ export function generateProceduralQuest(options: GenerateOptions = {}): Quest {
     }
   }
 
+  // Helper to verify a tile is completely unoccupied by furniture, hero starts, doors, exit, or other monsters
+  const isTileOccupied = (tx: number, ty: number): boolean => {
+    if (startPositions.some((sp) => sp.x === tx && sp.y === ty)) return true;
+    if (furniture.some((f) => tx >= f.x && tx < f.x + f.w && ty >= f.y && ty < f.y + f.h)) return true;
+    if (monsters.some((m) => m.x === tx && m.y === ty)) return true;
+    if (doors.some((d) => d.x === tx && d.y === ty)) return true;
+    if (exitPosition.x === tx && exitPosition.y === ty) return true;
+    return false;
+  };
+
+  const findUnoccupiedTileInRoom = (r: RoomDef): { x: number; y: number } | null => {
+    for (let ty = r.y + 1; ty < r.y + r.h - 1; ty++) {
+      for (let tx = r.x + 1; tx < r.x + r.w - 1; tx++) {
+        if (!isTileOccupied(tx, ty)) {
+          return { x: tx, y: ty };
+        }
+      }
+    }
+    return null;
+  };
+
   // 6. Spawn Monsters: 24 to 32 monsters total for deep ~30 min tactical crawl
   // Spawn the Supreme Boss in the deepest chamber
+  const bossPos = findUnoccupiedTileInRoom(bossRoom) || { x: bossRoom.x + 1, y: bossRoom.y + 1 };
   monsters.push(
-    createMonster(bossTemplate.type, bossRoom.x + bossRoom.w - 2, bossRoom.y + 2, {
+    createMonster(bossTemplate.type, bossPos.x, bossPos.y, {
       customName: bossTemplate.name,
       bonusHp: bossTemplate.bonusHp + (floor > 1 ? floor : 0),
       roomId: bossRoom.id,
@@ -394,16 +416,22 @@ export function generateProceduralQuest(options: GenerateOptions = {}): Quest {
   );
 
   // Supreme Boss Bodyguards
-  monsters.push(
-    createMonster('chaos_warrior', bossRoom.x + 2, bossRoom.y + 1, {
-      roomId: bossRoom.id,
-    })
-  );
-  monsters.push(
-    createMonster('fimir', bossRoom.x + 2, bossRoom.y + bossRoom.h - 2, {
-      roomId: bossRoom.id,
-    })
-  );
+  const bg1Pos = findUnoccupiedTileInRoom(bossRoom);
+  if (bg1Pos) {
+    monsters.push(
+      createMonster('chaos_warrior', bg1Pos.x, bg1Pos.y, {
+        roomId: bossRoom.id,
+      })
+    );
+  }
+  const bg2Pos = findUnoccupiedTileInRoom(bossRoom);
+  if (bg2Pos) {
+    monsters.push(
+      createMonster('fimir', bg2Pos.x, bg2Pos.y, {
+        roomId: bossRoom.id,
+      })
+    );
+  }
 
   // Spawn monsters in remaining rooms (1-3 monsters per room)
   rooms.forEach((r, idx) => {
@@ -411,11 +439,8 @@ export function generateProceduralQuest(options: GenerateOptions = {}): Quest {
 
     const monsterCount = randInt(1, 3);
     for (let m = 0; m < monsterCount; m++) {
-      const mx = r.x + 1 + (m % (r.w - 2));
-      const my = r.y + 1 + Math.floor(m / (r.w - 2));
-
-      const hitFurn = furniture.some((f) => mx >= f.x && mx < f.x + f.w && my >= f.y && my < f.y + f.h);
-      if (hitFurn) continue;
+      const freePos = findUnoccupiedTileInRoom(r);
+      if (!freePos) break;
 
       const roll = Math.random();
       let mType: 'goblin' | 'orc' | 'skeleton' | 'zombie' | 'fimir' | 'mummy' | 'chaos_warrior' = 'goblin';
@@ -429,7 +454,7 @@ export function generateProceduralQuest(options: GenerateOptions = {}): Quest {
       else mType = 'chaos_warrior';
 
       monsters.push(
-        createMonster(mType, mx, my, {
+        createMonster(mType, freePos.x, freePos.y, {
           roomId: r.id,
         })
       );
@@ -438,17 +463,19 @@ export function generateProceduralQuest(options: GenerateOptions = {}): Quest {
 
   // Add 4-6 Roaming Patrol Monsters in the Corridors (classic wandering monsters)
   for (let p = 0; p < randInt(4, 6); p++) {
-    const rx = randInt(2, mapWidth - 3);
-    const ry = randInt(2, mapHeight - 3);
-    // Ensure in corridor (outside of any room)
-    const inRoom = rooms.some((r) => rx >= r.x && rx < r.x + r.w && ry >= r.y && ry < r.y + r.h);
-    if (!inRoom) {
-      const patrolType = Math.random() < 0.5 ? 'goblin' : 'orc';
-      monsters.push(
-        createMonster(patrolType, rx, ry, {
-          roomId: 'corridor',
-        })
-      );
+    for (let tryCount = 0; tryCount < 40; tryCount++) {
+      const rx = randInt(2, mapWidth - 3);
+      const ry = randInt(2, mapHeight - 3);
+      const inRoom = rooms.some((r) => rx >= r.x && rx < r.x + r.w && ry >= r.y && ry < r.y + r.h);
+      if (!inRoom && !isTileOccupied(rx, ry)) {
+        const patrolType = Math.random() < 0.5 ? 'goblin' : 'orc';
+        monsters.push(
+          createMonster(patrolType, rx, ry, {
+            roomId: 'corridor',
+          })
+        );
+        break;
+      }
     }
   }
 

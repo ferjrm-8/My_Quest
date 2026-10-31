@@ -1029,6 +1029,24 @@ export default function App() {
     } else {
       audio.playTrap();
       addLog(`⚠️ ¡EMBOSCADA! Un Goblin surge de las grietas atacando a ${activeHero.name}!`, 'trap');
+      const dirs = [
+        { dx: 1, dy: 0 },
+        { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 },
+        { dx: 0, dy: -1 },
+      ];
+      let ambushPos = { x: activeHero.x + 1, y: activeHero.y };
+      for (const { dx, dy } of dirs) {
+        const ax = activeHero.x + dx;
+        const ay = activeHero.y + dy;
+        const isOccHero = heroes.some((h) => !h.isDead && h.x === ax && h.y === ay);
+        const isOccMon = activeQuest.monsters.some((m) => !m.isDead && m.x === ax && m.y === ay);
+        if (!isOccHero && !isOccMon) {
+          ambushPos = { x: ax, y: ay };
+          break;
+        }
+      }
+
       const ambushMonster = {
         id: `ambush_${Date.now()}`,
         type: 'goblin' as const,
@@ -1039,8 +1057,8 @@ export default function App() {
         attackDice: 2,
         defendDice: 1,
         moveSpaces: 10,
-        x: activeHero.x + 1,
-        y: activeHero.y,
+        x: ambushPos.x,
+        y: ambushPos.y,
         roomId: activeRoom.id,
         revealed: true,
         isDead: false,
@@ -1224,6 +1242,7 @@ export default function App() {
     }
 
     let mIdx = 0;
+    let latestMonsters = [...activeQuest.monsters];
 
     const processNextMonster = () => {
       if (mIdx >= activeMonsters.length) {
@@ -1238,7 +1257,7 @@ export default function App() {
       mIdx++;
 
       // Verify monster is still alive
-      const currentMonster = activeQuest.monsters.find((m) => m.id === monsterRef.id && !m.isDead);
+      const currentMonster = latestMonsters.find((m) => m.id === monsterRef.id && !m.isDead);
       if (!currentMonster) {
         processNextMonster();
         return;
@@ -1252,8 +1271,8 @@ export default function App() {
         return;
       }
 
-      // Compute movement path
-      const movePath = getMonsterMovePath(currentMonster, activeQuest, freshLivingHeroes, activeQuest.monsters);
+      // Compute movement path with latest monster positions!
+      const movePath = getMonsterMovePath(currentMonster, activeQuest, freshLivingHeroes, latestMonsters);
 
       // Focus camera on monster before it moves
       setActiveActorOverride({ x: currentMonster.x, y: currentMonster.y });
@@ -1270,13 +1289,18 @@ export default function App() {
           if (stepIdx >= movePath.length) {
             clearInterval(moveInterval);
             // Finished moving! Check attack
-            const updatedFreshMonster = { ...currentMonster, x: movePath[movePath.length - 1].x, y: movePath[movePath.length - 1].y };
+            const finalPos = movePath[movePath.length - 1];
+            latestMonsters = latestMonsters.map((m) => (m.id === currentMonster.id ? { ...m, x: finalPos.x, y: finalPos.y } : m));
+            const updatedFreshMonster = { ...currentMonster, x: finalPos.x, y: finalPos.y };
             checkMonsterAttackAndProceed(updatedFreshMonster, freshLivingHeroes);
             return;
           }
 
           const nextTile = movePath[stepIdx];
           stepIdx++;
+
+          // Synchronize local tracking array
+          latestMonsters = latestMonsters.map((m) => (m.id === currentMonster.id ? { ...m, x: nextTile.x, y: nextTile.y } : m));
 
           // Update monster position in quest state
           setActiveQuest((prev) => ({

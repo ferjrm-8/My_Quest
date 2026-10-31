@@ -80,6 +80,9 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
         const match2 = isSamePoint(d.tileB, { x: fromX, y: fromY }) && isSamePoint(d.tileA, { x: toX, y: toY });
         if (match1 || match2) return true;
       }
+      if ((d.x === fromX && d.y === fromY) || (d.x === toX && d.y === toY)) {
+        return true;
+      }
       return false;
     });
   };
@@ -101,12 +104,11 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
       const isTargetableMonster = monsterAtTile && targetableMonsters.includes(monsterAtTile.id);
       const isInteractiveFurniture = furnAtTile && !furnAtTile.searched && adjacentFurniture.some((f) => f.id === furnAtTile.id);
 
-      // In HeroQuest, walls exist strictly on the boundary of ROOMS!
-      // Corridors are open, connected walkways with no walls between corridor tiles.
-      const isRoomNorthEdge = Boolean(room && y === room.y);
-      const isRoomSouthEdge = Boolean(room && y === room.y + room.h - 1);
-      const isRoomWestEdge = Boolean(room && x === room.x);
-      const isRoomEastEdge = Boolean(room && x === room.x + room.w - 1);
+      // In HeroQuest, walls exist on room perimeters or where corridors touch rooms/map edges
+      const isRoomNorthEdge = Boolean((room && y === room.y) || (!room && (y === 0 || getRoomAt(x, y - 1) !== undefined)));
+      const isRoomSouthEdge = Boolean((room && y === room.y + room.h - 1) || (!room && (y === mapHeight - 1 || getRoomAt(x, y + 1) !== undefined)));
+      const isRoomWestEdge = Boolean((room && x === room.x) || (!room && (x === 0 || getRoomAt(x - 1, y) !== undefined)));
+      const isRoomEastEdge = Boolean((room && x === room.x + room.w - 1) || (!room && (x === mapWidth - 1 || getRoomAt(x + 1, y) !== undefined)));
 
       // Doors located on these perimeter edges
       const northDoor = isRoomNorthEdge ? findDoorOnEdge(x, y, x, y - 1) : undefined;
@@ -126,14 +128,12 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
           key={`${x}-${y}`}
           id={`hq-tile-${x}-${y}`}
           onClick={() => {
-            if (touchingInteractiveDoor) {
-              onDoorClick(touchingInteractiveDoor);
+            if (isMoveTarget) {
+              onTileClick(x, y);
             } else if (isInteractiveFurniture && furnAtTile) {
               onFurnitureClick(furnAtTile);
             } else if (monsterAtTile && visible) {
               onMonsterClick(monsterAtTile);
-            } else if (isMoveTarget) {
-              onTileClick(x, y);
             }
           }}
           className={`relative w-8 h-8 sm:w-11 sm:h-11 md:w-12 md:h-12 transition-all select-none flex items-center justify-center ${
@@ -203,7 +203,7 @@ export const DungeonBoard: React.FC<DungeonBoardProps> = ({
               Walls exist strictly along room perimeters.
               Doors sit directly on the wall dividing room and corridor.
               ══════════════════════════════════════════════════════════════════════════════ */}
-          {visible && room && (
+          {visible && (
             <>
               {/* ── NORTH WALL / DOOR ── */}
               {isRoomNorthEdge && (
