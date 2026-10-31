@@ -1452,7 +1452,13 @@ export default function App() {
         }
       }
 
-      // 1. Check if can cast heal spell on self or injured ally
+      // 1. Roll movement dice first if not rolled yet
+      if (!hasRolledMovement) {
+        handleRollMovement();
+        return;
+      }
+
+      // 2. Check if can cast heal spell on self or injured ally
       if (canCastSpell) {
         const healSpell = activeHero.spells.find((s) => !s.isUsed && s.effectType === 'heal');
         if (healSpell) {
@@ -1464,25 +1470,25 @@ export default function App() {
         }
       }
 
-      // 2. If adjacent unsearched furniture is present, search it!
+      // 3. If adjacent unsearched furniture is present, search it!
       if (!hasActed && adjacentFurniture.length > 0) {
         handleSearchAdjacentFurniture();
         return;
       }
 
-      // 3. If in room with no monsters and room hasn't been searched for treasure, search treasure!
+      // 4. If in room with no monsters and room hasn't been searched for treasure, search treasure!
       if (!hasActed && canSearchTreasure) {
         handleSearchTreasure();
         return;
       }
 
-      // 4. Disarm trap if adjacent
+      // 5. Disarm trap if adjacent
       if (!hasActed && canDisarmTrap) {
         handleDisarmTrap();
         return;
       }
 
-      // 5. If targetable monster is present, attack!
+      // 6. If targetable monster is present, attack!
       if (targetableMonsters.length > 0 && !hasActed) {
         const targetMonster = activeQuest.monsters.find((m) => m.id === targetableMonsters[0]);
         if (targetMonster) {
@@ -1491,20 +1497,21 @@ export default function App() {
         }
       }
 
-      // 6. If closed door is adjacent, open it!
+      // 7. If closed door is adjacent, open it!
       if (adjacentDoors.length > 0) {
         handleOpenDoor(adjacentDoors[0]);
         return;
       }
 
-      // 7. If can move, use smart BFS pathfinder towards monsters, doors, or party leader
+      // 8. Use smart BFS pathfinder (supporting ally pass-through!) towards monsters, doors, or party leader
       if (movementRemaining > 0) {
         const smartStep = getSmartAIMove(
           activeHero,
           activeQuest,
           heroes,
           activeQuest.monsters,
-          aiVisitedThisTurn.current
+          aiVisitedThisTurn.current,
+          movementRemaining
         );
 
         if (smartStep) {
@@ -1512,12 +1519,6 @@ export default function App() {
           handleTileClick(smartStep.x, smartStep.y);
           return;
         }
-      }
-
-      // 8. If movement has not been rolled, roll movement dice
-      if (!hasRolledMovement) {
-        handleRollMovement();
-        return;
       }
 
       // 9. End turn
