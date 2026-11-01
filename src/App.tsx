@@ -26,6 +26,8 @@ export default function App() {
 
   // Party & Quests
   const [heroes, setHeroes] = useState<Hero[]>(() => createInitialHeroes());
+  const heroesRef = useRef<Hero[]>(heroes);
+  heroesRef.current = heroes;
   const [selectedQuest, setSelectedQuest] = useState<Quest>(QUESTS[0]);
   const [activeQuest, setActiveQuest] = useState<Quest>(QUESTS[0]);
   const [currentFloor, setCurrentFloor] = useState<number>(1);
@@ -335,19 +337,28 @@ export default function App() {
         addLog(`¡PELIGRO! ${activeHero.name} ha caído en una trampa de ${trap.type}! Sufre ${hpDeduction} daño.`, 'trap');
       }
 
+      const isHeroDead = activeHero.bodyPoints - hpDeduction <= 0;
       const updatedHero: Hero = {
         ...activeHero,
         x,
         y,
         bodyPoints: Math.max(0, activeHero.bodyPoints - hpDeduction),
-        isDead: activeHero.bodyPoints - hpDeduction <= 0,
+        isDead: isHeroDead,
       };
 
-      setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
+      const nextHeroesList = heroes.map((h) => (h.id === updatedHero.id ? updatedHero : h));
+      heroesRef.current = nextHeroesList;
+      setHeroes(nextHeroesList);
       setMovementRemaining((prev) => Math.max(0, prev - stepCost));
 
       if (updatedHero.isDead) {
-        addLog(`💀 ¡${updatedHero.name} ha muerto en las profundidades de la mazmorra!`, 'danger');
+        audio.playDamage();
+        addLog(`💀 ¡${updatedHero.name} ha caído en una trampa mortal y ha perecido!`, 'danger');
+        const anyLiving = nextHeroesList.some((h) => !h.isDead && h.bodyPoints > 0);
+        if (!anyLiving) {
+          setOutcomeState({ isOpen: true, isVictory: false });
+          return;
+        }
       } else if (x === activeQuest.exitPosition.x && y === activeQuest.exitPosition.y) {
         const currentLivingBoss = activeQuest.monsters.find((m) => m.isBoss && !m.isDead);
         const currentRemainingMonsters = activeQuest.monsters.filter((m) => !m.isDead);
@@ -787,22 +798,28 @@ export default function App() {
   };
 
   // Finish Morcar's turn cleanly and advance to the first living hero with fresh action & move state
-  const finishMorcarTurn = useCallback(() => {
+  const finishMorcarTurn = useCallback((overrideHeroes?: Hero[]) => {
     isMorcarProcessing.current = false;
     setActiveActorOverride(null);
     setPendingMonsterQueue([]);
     setIsMorcarTurn(false);
     setRoundNumber((prev) => prev + 1);
 
-    const firstLivingIndex = heroes.findIndex((h) => !h.isDead && h.bodyPoints > 0);
-    const targetIndex = firstLivingIndex >= 0 ? firstLivingIndex : 0;
-    setActiveHeroIndex(targetIndex);
+    const listToCheck = overrideHeroes || heroesRef.current;
+    const firstLivingIndex = listToCheck.findIndex((h) => !h.isDead && h.bodyPoints > 0);
+
+    if (firstLivingIndex === -1) {
+      setOutcomeState({ isOpen: true, isVictory: false });
+      return;
+    }
+
+    setActiveHeroIndex(firstLivingIndex);
     setMovementRemaining(0);
     setHasRolledMovement(false);
     setHasActed(false);
     aiVisitedThisTurn.current.clear();
-    addLog(`✨ NUEVA RONDA: Comienza el turno de ${heroes[targetIndex].name}.`, 'turn');
-  }, [heroes, addLog]);
+    addLog(`✨ NUEVA RONDA: Comienza el turno de ${listToCheck[firstLivingIndex].name}.`, 'turn');
+  }, [addLog]);
 
   // Execute next monster attack in Morcar's sequence:
   const executeNextMonsterAttack = useCallback(
@@ -842,7 +859,7 @@ export default function App() {
         // No further monster attacks possible in this turn
         isMorcarProcessing.current = false;
         setActiveActorOverride(null);
-        finishMorcarTurn();
+        finishMorcarTurn(currentHeroes);
         return;
       }
 
@@ -957,13 +974,14 @@ export default function App() {
         };
 
         updatedHeroesList = heroes.map((h) => (h.id === updatedHero.id ? updatedHero : h));
+        heroesRef.current = updatedHeroesList;
         setHeroes(updatedHeroesList);
 
         if (isDead) {
           audio.playDamage();
           addLog(`💀 ¡${hero.name} ha caído en combate ante el ataque de ${attackerName}!`, 'danger');
 
-          const allDead = updatedHeroesList.every((h) => h.isDead);
+          const allDead = updatedHeroesList.every((h) => h.isDead || h.bodyPoints <= 0);
           if (allDead) {
             setCombatState(null);
             setPendingMonsterQueue([]);
@@ -995,7 +1013,7 @@ export default function App() {
       // Conclude Morcar's turn cleanly
       isMorcarProcessing.current = false;
       setActiveActorOverride(null);
-      finishMorcarTurn();
+      finishMorcarTurn(updatedHeroesList);
     }
   };
 
@@ -1040,10 +1058,14 @@ export default function App() {
         { dx: 0, dy: 1 },
         { dx: 0, dy: -1 },
       ];
-      let ambushPos = { x: activeHero.x + 1, y: activeHero.y };
+      let ambushPos = { x: activeHero.x, y: activeHero.y };
       for (const { dx, dy } of dirs) {
         const ax = activeHero.x + dx;
         const ay = activeHero.y + dy;
+        if (ax < 0 || ax >= activeQuest.mapWidth || ay < 0 || ay >= activeQuest.mapHeight) continue;
+        if (!canCrossBoundary(activeHero.x, activeHero.y, ax, ay, activeQuest.rooms, activeQuest.doors)) continue;
+        const isOccFurn = activeQuest.furniture.some((f) => ax >= f.x && ax < f.x + f.w && ay >= f.y && ay < f.y + f.h);
+        if (isOccFurn) continue;
         const isOccHero = heroes.some((h) => !h.isDead && h.x === ax && h.y === ay);
         const isOccMon = activeQuest.monsters.some((m) => !m.isDead && m.x === ax && m.y === ay);
         if (!isOccHero && !isOccMon) {
@@ -1087,7 +1109,9 @@ export default function App() {
     let foundCount = 0;
     const updatedTraps = activeQuest.traps.map((t) => {
       const dist = Math.abs(t.x - activeHero.x) + Math.abs(t.y - activeHero.y);
-      if (dist <= 4 && !t.detected) {
+      // Traps cannot be detected through solid stone walls without an open door
+      const canSee = canCrossBoundary(activeHero.x, activeHero.y, t.x, t.y, activeQuest.rooms, activeQuest.doors);
+      if (dist <= 4 && !t.detected && canSee) {
         foundCount++;
         return { ...t, detected: true };
       }
@@ -1153,12 +1177,28 @@ export default function App() {
       if (roll.blackShields > 0) {
         audio.playTrap();
         nearbyTrap.sprung = true;
+        const newHp = Math.max(0, activeHero.bodyPoints - nearbyTrap.damage);
+        const isHeroDead = newHp <= 0;
         const updatedHero: Hero = {
           ...activeHero,
-          bodyPoints: Math.max(0, activeHero.bodyPoints - nearbyTrap.damage),
+          bodyPoints: newHp,
+          isDead: isHeroDead,
         };
-        setHeroes((prev) => prev.map((h) => (h.id === updatedHero.id ? updatedHero : h)));
-        addLog(`💥 ¡FALLO AL DESARMAR! El resorte se activó e hirió a ${activeHero.name}.`, 'trap');
+        const nextHeroesList = heroes.map((h) => (h.id === updatedHero.id ? updatedHero : h));
+        heroesRef.current = nextHeroesList;
+        setHeroes(nextHeroesList);
+
+        if (isHeroDead) {
+          audio.playDamage();
+          addLog(`💀 ¡FALLO FATAL! La trampa detonó y mató a ${activeHero.name}.`, 'danger');
+          const anyLiving = nextHeroesList.some((h) => !h.isDead && h.bodyPoints > 0);
+          if (!anyLiving) {
+            setOutcomeState({ isOpen: true, isVictory: false });
+            return;
+          }
+        } else {
+          addLog(`💥 ¡FALLO AL DESARMAR! El resorte se activó e hirió a ${activeHero.name} (-${nearbyTrap.damage} PV).`, 'trap');
+        }
       } else {
         audio.playLoot();
         nearbyTrap.sprung = true;
@@ -1225,19 +1265,26 @@ export default function App() {
     setHasActed(false);
     aiVisitedThisTurn.current.clear();
 
+    const currentHeroes = heroesRef.current;
+    const livingHeroes = currentHeroes.filter((h) => !h.isDead && h.bodyPoints > 0);
+    if (livingHeroes.length === 0) {
+      setOutcomeState({ isOpen: true, isVictory: false });
+      return;
+    }
+
     let nextIndex = activeHeroIndex + 1;
-    while (nextIndex < heroes.length && heroes[nextIndex].isDead) {
+    while (nextIndex < currentHeroes.length && (currentHeroes[nextIndex].isDead || currentHeroes[nextIndex].bodyPoints <= 0)) {
       nextIndex++;
     }
 
-    if (nextIndex >= heroes.length) {
+    if (nextIndex >= currentHeroes.length) {
       setIsMorcarTurn(true);
       addLog(`💀 TURNO DE MORCAR: ¡Las criaturas de las tinieblas se movilizan y atacan!`, 'danger');
     } else {
       setActiveHeroIndex(nextIndex);
-      addLog(`Turno de ${heroes[nextIndex].name} (${heroes[nextIndex].title}).`, 'turn');
+      addLog(`Turno de ${currentHeroes[nextIndex].name} (${currentHeroes[nextIndex].title}).`, 'turn');
     }
-  }, [activeHeroIndex, heroes, addLog]);
+  }, [activeHeroIndex, addLog]);
 
   // Morcar's Turn: MONSTERS ADVANCE STEP-BY-STEP AND ATTACK (Cinematic step animation with camera auto-focus!)
   const handleMorcarStep = () => {
@@ -1245,7 +1292,7 @@ export default function App() {
 
     audio.playDamage();
 
-    const livingHeroes = heroes.filter((h) => !h.isDead && h.bodyPoints > 0);
+    const livingHeroes = heroesRef.current.filter((h) => !h.isDead && h.bodyPoints > 0);
     if (livingHeroes.length === 0) {
       setOutcomeState({ isOpen: true, isVictory: false });
       return;
@@ -1260,7 +1307,7 @@ export default function App() {
       addLog(`Las sombras permanecen en calma. No hay criaturas despiertas.`, 'info');
       isMorcarProcessing.current = false;
       setActiveActorOverride(null);
-      finishMorcarTurn();
+      finishMorcarTurn(heroesRef.current);
       return;
     }
 
@@ -1272,7 +1319,7 @@ export default function App() {
         // All monsters processed!
         isMorcarProcessing.current = false;
         setActiveActorOverride(null);
-        finishMorcarTurn();
+        finishMorcarTurn(heroesRef.current);
         return;
       }
 
@@ -1286,7 +1333,7 @@ export default function App() {
         return;
       }
 
-      const freshLivingHeroes = heroes.filter((h) => !h.isDead && h.bodyPoints > 0);
+      const freshLivingHeroes = heroesRef.current.filter((h) => !h.isDead && h.bodyPoints > 0);
       if (freshLivingHeroes.length === 0) {
         isMorcarProcessing.current = false;
         setActiveActorOverride(null);
@@ -1386,6 +1433,36 @@ export default function App() {
 
     processNextMonster();
   };
+
+  // Guard: Automatically skip dead heroes during hero turns or trigger party defeat
+  useEffect(() => {
+    if (gamePhase !== 'dungeon' || outcomeState.isOpen || combatState) return;
+
+    const livingHeroes = heroes.filter((h) => !h.isDead && h.bodyPoints > 0);
+    if (livingHeroes.length === 0) {
+      setOutcomeState({ isOpen: true, isVictory: false });
+      return;
+    }
+
+    if (!isMorcarTurn && (activeHero.isDead || activeHero.bodyPoints <= 0)) {
+      let nextIndex = activeHeroIndex + 1;
+      while (nextIndex < heroes.length && (heroes[nextIndex].isDead || heroes[nextIndex].bodyPoints <= 0)) {
+        nextIndex++;
+      }
+
+      if (nextIndex >= heroes.length) {
+        setIsMorcarTurn(true);
+        addLog(`💀 TURNO DE MORCAR: ¡Las criaturas de las tinieblas se movilizan!`, 'danger');
+      } else {
+        setActiveHeroIndex(nextIndex);
+        setMovementRemaining(0);
+        setHasRolledMovement(false);
+        setHasActed(false);
+        aiVisitedThisTurn.current.clear();
+        addLog(`El héroe anterior ha caído. Turno de ${heroes[nextIndex].name}.`, 'turn');
+      }
+    }
+  }, [heroes, activeHero, activeHeroIndex, gamePhase, isMorcarTurn, outcomeState.isOpen, combatState, addLog]);
 
   // Automated Smart AI Hero behavior with full resource management
   useEffect(() => {

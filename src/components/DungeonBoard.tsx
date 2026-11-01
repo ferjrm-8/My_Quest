@@ -1,8 +1,20 @@
 import React from 'react';
 import { Door, Furniture, Hero, Monster, Quest, Trap } from '../types/heroquest';
 import { HeroTokenView, MonsterTokenView } from './PixelTokens';
+import {
+  ChestSprite,
+  WeaponsRackSprite,
+  TableSprite,
+  TombSprite,
+  ThroneSprite,
+  BookshelfSprite,
+  PitTrapSprite,
+  SpearTrapSprite,
+  RockTrapSprite,
+  ExitStaircaseSprite,
+} from './FurnitureSprites';
 
-// Rich 3D Skeuomorphic Furniture Model spanning across w x h grid tiles
+// Clean 16-Bit Furniture Component strictly contained within tile boundaries
 interface FurnitureViewProps {
   furniture: Furniture;
   isInteractive: boolean;
@@ -26,98 +38,26 @@ const FurnitureView: React.FC<FurnitureViewProps> = ({ furniture, isInteractive,
         width: isMultiTile ? `calc(${w * 100}% + ${(w - 1) * 1}px)` : '100%',
         height: isMultiTile ? `calc(${h * 100}% + ${(h - 1) * 1}px)` : '100%',
       }}
-      title={`${name} ${searched ? '(Vacío / Registrado)' : '(Sin abrir)'}`}
-      className={`absolute ${isMultiTile ? 'top-0 left-0' : 'inset-0.5'} z-28 rounded-lg transition-all select-none flex items-center justify-center p-0.5 border-2 shadow-[0_8px_20px_rgba(0,0,0,0.95)] overflow-hidden ${
+      title={`${name} ${searched ? '(Vacío / Registrado)' : '(Sin abrir / Clic para rebuscar)'}`}
+      className={`absolute ${isMultiTile ? 'top-0 left-0' : 'inset-0.5'} z-28 rounded-md transition-all select-none flex items-center justify-center p-0.5 border shadow-[0_4px_12px_rgba(0,0,0,0.85)] overflow-hidden ${
         searched
-          ? 'opacity-50 bg-[#171310]/95 border-stone-700 cursor-default'
+          ? 'opacity-60 bg-[#14100c]/90 border-stone-800 cursor-default'
           : isInteractive
-          ? 'bg-gradient-to-b from-[#854d0e] via-[#78350f] to-[#451a03] border-amber-400 cursor-pointer ring-2 ring-yellow-400 animate-pulse shadow-[0_0_20px_rgba(250,204,21,0.7)]'
-          : 'bg-gradient-to-b from-[#78350f] via-[#5b21b6/20] to-[#291104] border-amber-600/80 cursor-default'
+          ? 'bg-amber-950/80 border-amber-400 cursor-pointer ring-2 ring-yellow-400 animate-pulse shadow-[0_0_16px_rgba(250,204,21,0.8)]'
+          : 'bg-[#18130e]/90 border-amber-900/60 cursor-default'
       }`}
     >
-      {/* CHEST DESIGN */}
-      {type === 'chest' && (
-        <div className="relative w-full h-full flex flex-col items-center justify-between p-0.5 bg-gradient-to-b from-[#92400e] via-[#78350f] to-[#451a03] rounded border border-amber-500/80 shadow-inner overflow-hidden">
-          {/* Iron/Brass Reinforcement Brackets on 4 Corners */}
-          <div className="absolute top-0 left-0 w-2 h-2 bg-[#ca8a04] border-t border-l border-amber-200 rounded-tl shadow" />
-          <div className="absolute top-0 right-0 w-2 h-2 bg-[#ca8a04] border-t border-r border-amber-200 rounded-tr shadow" />
-          <div className="absolute bottom-0 left-0 w-2 h-2 bg-[#ca8a04] border-b border-l border-amber-200 rounded-bl shadow" />
-          <div className="absolute bottom-0 right-0 w-2 h-2 bg-[#ca8a04] border-b border-r border-amber-200 rounded-br shadow" />
-
-          {/* Wooden Grain Horizontal Planks */}
-          <div className="w-full h-full flex flex-col justify-between py-0.5 pointer-events-none">
-            <div className="w-full h-[1px] bg-stone-900/60" />
-            <div className="w-full h-[1px] bg-stone-900/60" />
-          </div>
-
-          {/* Center Latch Plate or Opened State */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            {searched ? (
-              <div className="flex flex-col items-center justify-center">
-                <span className="text-sm sm:text-lg drop-shadow leading-none">📦</span>
-                <span className="text-[6px] font-pixel text-stone-400 font-bold tracking-tighter uppercase">VACÍO</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-0.5 bg-amber-950/90 px-1.5 py-0.5 rounded border border-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.9)]">
-                <span className="text-sm sm:text-base leading-none drop-shadow-md">🎁</span>
-                <div className="w-2 h-3 bg-gradient-to-b from-yellow-300 via-amber-500 to-yellow-600 rounded-xs border border-amber-200 shadow flex items-center justify-center text-[6px]">
-                  🔑
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TOMB / SARCOPHAGUS DESIGN */}
-      {type === 'tomb' && (
-        <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#57534e] via-[#292524] to-[#1c1917] rounded border-2 border-stone-500 shadow-2xl p-0.5 overflow-hidden">
-          <div className="absolute inset-1 border border-stone-600/50 rounded-xs" />
-          <span className="text-base sm:text-xl drop-shadow-lg z-10">⚰️</span>
-          <span className="text-[7px] font-pixel text-stone-300 font-bold uppercase tracking-widest mt-0.5 z-10">
-            {searched ? 'DESPOJADO' : 'SARCÓFAGO'}
-          </span>
-        </div>
-      )}
-
-      {/* TABLE DESIGN */}
-      {type === 'table' && (
-        <div className="relative w-full h-full flex items-center justify-around bg-gradient-to-r from-[#451a03] via-[#78350f] to-[#451a03] rounded border-2 border-amber-700 shadow-xl px-1">
-          <span className="text-xs sm:text-base drop-shadow">📜</span>
-          <span className="text-xs sm:text-base drop-shadow">🧪</span>
-          <span className="text-xs sm:text-base drop-shadow">🕯️</span>
-        </div>
-      )}
-
-      {/* THRONE DESIGN */}
-      {type === 'throne' && (
-        <div className="relative w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#1c1917] via-[#292524] to-[#0c0a09] rounded-lg border-2 border-amber-600 shadow-2xl p-0.5">
-          <div className="w-3/4 h-2/3 bg-red-950/90 border border-red-700 rounded-t flex items-center justify-center shadow-inner">
-            <span className="text-sm sm:text-lg drop-shadow">👑</span>
-          </div>
-        </div>
-      )}
-
-      {/* WEAPONS RACK DESIGN */}
-      {type === 'weapons_rack' && (
-        <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-b from-[#78350f] to-[#291104] rounded border-2 border-amber-600 shadow-xl gap-0.5">
-          <span className="text-sm sm:text-lg drop-shadow">🛡️</span>
-          <span className="text-sm sm:text-lg drop-shadow">⚔️</span>
-        </div>
-      )}
-
-      {/* BOOKSHELF DESIGN */}
-      {type === 'bookshelf' && (
-        <div className="relative w-full h-full flex items-center justify-center bg-gradient-to-b from-[#451a03] to-[#1c1917] rounded border-2 border-amber-700 shadow-xl gap-0.5">
-          <span className="text-sm sm:text-lg drop-shadow">📚</span>
-          <span className="text-sm sm:text-lg drop-shadow">🔮</span>
-        </div>
-      )}
+      {type === 'chest' && <ChestSprite searched={searched} />}
+      {type === 'weapons_rack' && <WeaponsRackSprite searched={searched} />}
+      {type === 'table' && <TableSprite searched={searched} w={w} />}
+      {type === 'tomb' && <TombSprite searched={searched} h={h} />}
+      {type === 'throne' && <ThroneSprite searched={searched} />}
+      {type === 'bookshelf' && <BookshelfSprite searched={searched} />}
     </div>
   );
 };
 
-// Skeuomorphic Trap Model
+// Pure Vector Trap Model (Contained within single cell)
 interface TrapViewProps {
   trap: Trap;
 }
@@ -127,40 +67,21 @@ const TrapView: React.FC<TrapViewProps> = ({ trap }) => {
 
   return (
     <div
-      className={`absolute inset-0.5 rounded-md flex flex-col items-center justify-center z-26 transition shadow-2xl border-2 ${
+      className={`absolute inset-0.5 rounded-md flex items-center justify-center z-26 transition p-0.5 shadow-xl border overflow-hidden ${
         sprung
-          ? 'bg-[#180808] border-red-600/90 text-red-400 shadow-[inset_0_0_12px_rgba(239,68,68,0.8)]'
-          : 'bg-[#1f1708] border-yellow-500/90 text-yellow-300 animate-pulse shadow-[0_0_12px_rgba(234,179,8,0.6)]'
+          ? 'bg-[#180808] border-red-600/90 shadow-[inset_0_0_12px_rgba(239,68,68,0.8)]'
+          : 'bg-[#1f1708] border-yellow-500/90 animate-pulse shadow-[0_0_12px_rgba(234,179,8,0.6)]'
       }`}
       title={`Trampa detectada: ${type === 'pit' ? 'Foso de Estacas' : type === 'spear' ? 'Trampa de Lanzas' : 'Derrumbe'} (${sprung ? 'DESENCADENADA' : 'ACTIVA'})`}
     >
-      {type === 'pit' ? (
-        <div className="w-full h-full bg-[#050404] border border-stone-800 rounded flex flex-col items-center justify-center p-0.5">
-          <span className="text-xs sm:text-sm drop-shadow-md">🕳️</span>
-          <span className="text-[6px] font-pixel font-bold text-stone-400 uppercase tracking-tighter">
-            {sprung ? 'FOSO ABIERTO' : 'FOSO'}
-          </span>
-        </div>
-      ) : type === 'spear' ? (
-        <div className="flex flex-col items-center justify-center">
-          <span className="text-xs sm:text-sm drop-shadow-md">💥🗡️</span>
-          <span className="text-[6px] font-pixel font-bold text-red-400 uppercase tracking-tighter">
-            {sprung ? 'LANZAS' : 'TRAMPA'}
-          </span>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center">
-          <span className="text-xs sm:text-sm drop-shadow-md">🪨💥</span>
-          <span className="text-[6px] font-pixel font-bold text-amber-400 uppercase tracking-tighter">
-            {sprung ? 'DERRUMBE' : 'ROCAS'}
-          </span>
-        </div>
-      )}
+      {type === 'pit' && <PitTrapSprite sprung={sprung} />}
+      {type === 'spear' && <SpearTrapSprite sprung={sprung} />}
+      {type === 'falling_rock' && <RockTrapSprite sprung={sprung} />}
     </div>
   );
 };
 
-// 3D Isometric Descending Dungeon Staircase / Trapdoor
+// Isometric Dungeon Exit Staircase
 interface ExitStaircaseViewProps {
   allObjectivesComplete: boolean;
 }
@@ -168,63 +89,18 @@ interface ExitStaircaseViewProps {
 const ExitStaircaseView: React.FC<ExitStaircaseViewProps> = ({ allObjectivesComplete }) => {
   return (
     <div
-      className={`absolute inset-0.5 rounded-lg flex flex-col items-center justify-between p-1 z-28 shadow-2xl border-2 transition-all overflow-hidden select-none ${
+      className={`absolute inset-0.5 rounded-md flex items-center justify-center p-0.5 z-28 shadow-2xl border transition-all overflow-hidden select-none ${
         allObjectivesComplete
-          ? 'bg-gradient-to-b from-[#78350f] via-[#b45309] to-[#1c1917] border-yellow-300 ring-4 ring-yellow-400/90 animate-pulse shadow-[0_0_24px_rgba(250,204,21,0.95)]'
-          : 'bg-gradient-to-b from-[#1c1917] via-[#0c0a09] to-[#030202] border-stone-700/80 text-stone-500'
+          ? 'bg-amber-950/80 border-yellow-300 ring-2 ring-yellow-400 animate-pulse shadow-[0_0_20px_rgba(250,204,21,0.9)]'
+          : 'bg-stone-950/90 border-stone-700/80'
       }`}
       title={
         allObjectivesComplete
-          ? 'Escalera de Salida Abierta: ¡Camina aquí para escapar con la victoria!'
-          : 'Escalera Sellada: Debes derrotar al Jefe Supremo y eliminar a todos los monstruos.'
+          ? 'Escalera de Salida (¡ABIERTA! Camina aquí para escapar con la victoria)'
+          : 'Escalera de Salida (SELLADA: Debes aniquilar al Jefe y purgar todos los monstruos)'
       }
     >
-      {/* 3D Descending Stone Steps */}
-      <div className="relative w-full h-full flex flex-col items-center justify-center gap-[1px]">
-        {/* Step 1 */}
-        <div
-          className={`w-full h-1.5 rounded-t border-t border-x ${
-            allObjectivesComplete ? 'bg-amber-200 border-amber-100 shadow-[0_0_8px_#fde047]' : 'bg-stone-700 border-stone-600'
-          }`}
-        />
-        {/* Step 2 */}
-        <div
-          className={`w-[85%] h-1.5 border-t border-x ${
-            allObjectivesComplete ? 'bg-amber-400 border-amber-300 shadow' : 'bg-stone-800 border-stone-700'
-          }`}
-        />
-        {/* Step 3 */}
-        <div
-          className={`w-[70%] h-1.5 border-t border-x ${
-            allObjectivesComplete ? 'bg-amber-600 border-amber-500 shadow' : 'bg-stone-900 border-stone-800'
-          }`}
-        />
-        {/* Step 4 (Deep abyss) */}
-        <div
-          className={`w-[55%] h-1.5 rounded-b border-t ${
-            allObjectivesComplete ? 'bg-amber-900 border-amber-700 shadow-inner' : 'bg-[#030202] border-stone-950'
-          }`}
-        />
-
-        {/* Center Overlay Badge */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          {allObjectivesComplete ? (
-            <div className="flex flex-col items-center animate-bounce">
-              <span className="text-xs sm:text-sm drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">✨🪜✨</span>
-              <span className="text-[6px] font-pixel font-bold text-yellow-200 tracking-tighter bg-amber-950/90 px-1 py-0.5 rounded border border-yellow-300 shadow">
-                ¡LIBRE!
-              </span>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center">
-              <span className="text-xs sm:text-sm drop-shadow-md">🔒⛓️</span>
-              <span className="text-[6px] font-pixel font-bold text-stone-400 tracking-tighter bg-stone-950/90 px-1 py-0.5 rounded border border-stone-800">
-                SELLADA
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
+      <ExitStaircaseSprite isOpen={allObjectivesComplete} />
     </div>
   );
 };
